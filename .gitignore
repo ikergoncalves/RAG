@@ -15,6 +15,9 @@ venv/
 htmlcov/
 *.egg-info/
 
+# Local runtime data (uploaded source files)
+var/
+
 # Node
 node_modules/
 dist/
