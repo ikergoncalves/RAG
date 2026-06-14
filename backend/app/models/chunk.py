@@ -6,9 +6,10 @@ offsets into the document's reconstructed text.
 """
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -38,5 +39,12 @@ class Chunk(Base):
     section_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     char_start: Mapped[int] = mapped_column(Integer, nullable=False)
     char_end: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Timestamp of the chunk's last successful upsert into the Qdrant vector
+    # store; ``None`` means it has not been indexed yet. The indexing job uses
+    # this to skip already-indexed chunks (see app/services/indexing.py).
+    embedded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     document: Mapped["Document"] = relationship(back_populates="chunks")

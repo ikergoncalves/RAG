@@ -22,6 +22,8 @@ class ChunkRead(BaseModel):
     section_path: str | None
     char_start: int
     char_end: int
+    # Timestamp of the chunk's last successful upsert into Qdrant (None until indexed).
+    embedded_at: datetime | None
 
 
 class DocumentRead(BaseModel):
@@ -40,3 +42,10 @@ class DocumentDetail(DocumentRead):
     """Document view with the number of persisted chunks."""
 
     chunk_count: int
+
+
+class IndexingResult(BaseModel):
+    """Outcome of a (re-)indexing run for a document."""
+
+    document_id: uuid.UUID
+    indexed_chunks: int

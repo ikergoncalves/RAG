@@ -13,7 +13,7 @@ from pathlib import Path
 from app.db.session import AsyncSessionLocal
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
-from app.services import storage
+from app.services import indexing, storage
 from app.services.chunking import ChunkData, chunk_blocks
 from app.services.parsing import parse_document
 
@@ -68,3 +68,17 @@ async def process_document(document_id: uuid.UUID) -> None:
             if failed is not None:
                 failed.status = DocumentStatus.failed.value
                 await session.commit()
+            return
+
+    # Chunks are persisted; now embed and index them into Qdrant. This is a
+    # best-effort follow-up: a failure here (e.g. missing OPENAI_API_KEY or an
+    # unreachable Qdrant) does not undo the persisted chunks — they can be
+    # re-indexed later via POST /documents/{id}/index.
+    try:
+        await indexing.index_document(document_id)
+    except Exception:
+        logger.exception(
+            "Vector indexing failed for document %s; chunks are persisted, "
+            "retry via POST /documents/{id}/index",
+            document_id,
+        )

@@ -168,8 +168,23 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   `GET /documents/{id}`, `GET /documents/{id}/chunks` endpoints. Verified
   end-to-end via docker-compose (upload → parse → chunk → `status=indexed`) and
   10 unit tests covering parser metadata and chunk overlap/offsets.
-- ⬜ Later phases: embeddings + Qdrant indexing, hybrid retrieval + re-ranking,
-  cited generation, frontend, and evaluation.
+- ✅ **Phase 2 — Embeddings + Qdrant indexing**: swappable `EmbeddingProvider`
+  with an OpenAI implementation (`text-embedding-3-small`, 1536-dim, batching +
+  retry/backoff); a hybrid Qdrant collection (dense cosine vector `dense` +
+  sparse BM25 vector `sparse` with the IDF modifier, via FastEmbed); an
+  idempotent indexing job that embeds a document's chunks (dense + sparse) and
+  upserts them into Qdrant keyed by chunk id, stamping `chunks.embedded_at`
+  (migration `0002`, also exposed on `GET /documents/{id}/chunks`) so they are
+  not reprocessed; automatic indexing after ingestion plus a manual
+  `POST /documents/{id}/index` endpoint. Covered by Qdrant-backed integration
+  tests (idempotency / no-duplicate / similarity search) that skip when Qdrant
+  or `OPENAI_API_KEY` is unavailable. Verified end-to-end via docker-compose
+  with **real OpenAI embeddings** (migration `0002` auto-applied on startup;
+  uploading `sample.md` → `status=indexed`, every chunk's `embedded_at`
+  populated, and the `chunks` collection holding a matching number of points
+  with `dense` + `sparse` vectors).
+- ⬜ Later phases: hybrid retrieval + re-ranking, cited generation, frontend,
+  and evaluation.
 
 ### API endpoints
 
@@ -180,3 +195,4 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
 | `GET /documents`                 | List uploaded documents with status                    |
 | `GET /documents/{id}`            | Document details + chunk count                          |
 | `GET /documents/{id}/chunks`     | List a document's chunks with citation metadata         |
+| `POST /documents/{id}/index`     | Re-embed and (re-)index a document into Qdrant (hybrid)  |
