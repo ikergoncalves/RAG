@@ -7,3 +7,6 @@ black>=24.0,<26.0
 
 # Test-fixture generation (PDF fixtures); docx fixtures use python-docx.
 fpdf2>=2.7,<3.0
+
+# In-memory SQLite for indexing integration tests (no live Postgres needed).
+aiosqlite>=0.20,<1.0
