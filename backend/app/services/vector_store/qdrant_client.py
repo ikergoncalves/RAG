@@ -63,9 +63,7 @@ async def ensure_collection(
     await qc.create_collection(
         collection_name=name,
         vectors_config={
-            DENSE_VECTOR_NAME: models.VectorParams(
-                size=dim, distance=models.Distance.COSINE
-            ),
+            DENSE_VECTOR_NAME: models.VectorParams(size=dim, distance=models.Distance.COSINE),
         },
         sparse_vectors_config={
             SPARSE_VECTOR_NAME: models.SparseVectorParams(
@@ -90,9 +88,7 @@ async def upsert_points(
     await _client(client).upsert(collection_name=collection_name, points=points, wait=wait)
 
 
-async def count_points(
-    collection_name: str, *, client: AsyncQdrantClient | None = None
-) -> int:
+async def count_points(collection_name: str, *, client: AsyncQdrantClient | None = None) -> int:
     """Exact number of points currently stored in the collection."""
     result = await _client(client).count(collection_name=collection_name, exact=True)
     return result.count
@@ -107,12 +103,14 @@ async def search_dense(
     with_payload: bool = True,
 ) -> list[models.ScoredPoint]:
     """Nearest-neighbour search over the dense vector (debug/test helper)."""
-    return await _client(client).search(
+    response = await _client(client).query_points(
         collection_name=collection_name,
-        query_vector=models.NamedVector(name=DENSE_VECTOR_NAME, vector=query_vector),
+        query=query_vector,
+        using=DENSE_VECTOR_NAME,
         limit=limit,
         with_payload=with_payload,
     )
+    return response.points
 
 
 class Bm25SparseEmbedder:

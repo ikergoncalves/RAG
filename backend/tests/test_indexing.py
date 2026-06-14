@@ -17,7 +17,7 @@ import random
 import socket
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from qdrant_client import AsyncQdrantClient, models
@@ -117,7 +117,7 @@ async def _seed(
                 filename="sample.md",
                 content_type="text/markdown",
                 status=DocumentStatus.indexed.value,
-                uploaded_at=datetime.now(timezone.utc),
+                uploaded_at=datetime.now(UTC),
             )
         )
         session.add_all(
@@ -152,6 +152,12 @@ def _unique_collection() -> str:
     return f"test_chunks_{uuid.uuid4().hex[:12]}"
 
 
+def _qdrant_test_client() -> AsyncQdrantClient:
+    # A generous timeout keeps the suite reliable against a cold/slow local
+    # Qdrant (collection create/delete can be slow on some Docker setups).
+    return AsyncQdrantClient(url=settings.qdrant_url, timeout=60)
+
+
 # --- Tests ---------------------------------------------------------------
 
 
@@ -159,7 +165,7 @@ def _unique_collection() -> str:
 def test_indexing_is_idempotent_and_skips_embedded_chunks() -> None:
     async def body() -> None:
         engine, factory = await _make_session_factory()
-        client = AsyncQdrantClient(url=settings.qdrant_url)
+        client = _qdrant_test_client()
         collection = _unique_collection()
         document_id, _ = await _seed(factory, ["alpha text", "beta text", "gamma text"])
         try:
@@ -199,7 +205,7 @@ def test_indexing_is_idempotent_and_skips_embedded_chunks() -> None:
 def test_similarity_search_returns_expected_chunk() -> None:
     async def body() -> None:
         engine, factory = await _make_session_factory()
-        client = AsyncQdrantClient(url=settings.qdrant_url)
+        client = _qdrant_test_client()
         collection = _unique_collection()
         provider = FakeEmbeddingProvider()
         contents = ["alpha unique passage", "beta unique passage", "gamma unique passage"]
@@ -245,7 +251,7 @@ def test_real_openai_embeddings_similarity_search() -> None:
             pytest.skip(f"Real embedding backends unavailable: {exc}")
 
         engine, factory = await _make_session_factory()
-        client = AsyncQdrantClient(url=settings.qdrant_url)
+        client = _qdrant_test_client()
         collection = _unique_collection()
         contents = [
             "Mitochondria are the powerhouse of the cell and produce ATP.",

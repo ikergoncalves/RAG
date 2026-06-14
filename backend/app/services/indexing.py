@@ -13,7 +13,7 @@ its point instead of creating a duplicate.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from qdrant_client import AsyncQdrantClient, models
 from sqlalchemy import select
@@ -68,7 +68,7 @@ async def index_document(
         points = await _build_points(document, chunks, provider, sparse)
         await vector_store.upsert_points(collection, points, client=client)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for chunk in chunks:
             chunk.embedded_at = now
         await session.commit()
@@ -95,9 +95,7 @@ async def _build_points(
     sparse_vectors = await asyncio.to_thread(sparse.embed, texts)
 
     points: list[models.PointStruct] = []
-    for chunk, dense, sparse_vector in zip(
-        chunks, dense_vectors, sparse_vectors, strict=True
-    ):
+    for chunk, dense, sparse_vector in zip(chunks, dense_vectors, sparse_vectors, strict=True):
         points.append(
             models.PointStruct(
                 id=str(chunk.id),
