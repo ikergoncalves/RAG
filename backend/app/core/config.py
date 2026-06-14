@@ -46,6 +46,19 @@ class Settings(BaseSettings):
     # --- Qdrant ----------------------------------------------------------
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
+    # Collection holding chunk vectors (dense + sparse/BM25 for hybrid search).
+    qdrant_collection: str = "chunks"
+
+    # --- Embeddings / indexing -------------------------------------------
+    # Dense embeddings (OpenAI). ``text-embedding-3-small`` is 1536-dimensional.
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+    # Number of chunks embedded per OpenAI request.
+    embedding_batch_size: int = 100
+    # Retries on transient OpenAI errors (rate limits, timeouts) before giving up.
+    embedding_max_retries: int = 5
+    # FastEmbed model used to produce sparse (BM25) vectors for hybrid search.
+    sparse_embedding_model: str = "Qdrant/bm25"
 
     # --- Redis -----------------------------------------------------------
     redis_host: str = "localhost"
