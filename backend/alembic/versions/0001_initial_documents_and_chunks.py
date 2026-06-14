@@ -6,16 +6,17 @@ Create Date: 2026-06-14
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -47,9 +48,7 @@ def upgrade() -> None:
         sa.Column("char_end", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "document_id", "chunk_index", name="uq_chunks_document_chunk_index"
-        ),
+        sa.UniqueConstraint("document_id", "chunk_index", name="uq_chunks_document_chunk_index"),
     )
     op.create_index("ix_chunks_document_id", "chunks", ["document_id"])
 

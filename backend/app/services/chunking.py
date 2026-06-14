@@ -108,7 +108,7 @@ def chunk_blocks(
 
     chunks: list[ChunkData] = []
     index = 0
-    for block, (block_start, _block_end) in zip(cleaned, spans):
+    for block, (block_start, _block_end) in zip(cleaned, spans, strict=False):
         tokens = encoder.encode(block.text)
         if not tokens:
             continue

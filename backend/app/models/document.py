@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.models.chunk import Chunk
 
 
-class DocumentStatus(str, enum.Enum):
+class DocumentStatus(enum.StrEnum):
     """Lifecycle of a document through the ingestion pipeline."""
 
     pending = "pending"

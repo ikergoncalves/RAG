@@ -57,7 +57,7 @@ def test_chunk_sizes_and_overlap_are_consistent() -> None:
         assert chunk.token_count == CHUNK_SIZE
 
     # Consecutive chunks overlap by ~OVERLAP tokens and always move forward.
-    for prev, nxt in zip(chunks, chunks[1:]):
+    for prev, nxt in zip(chunks, chunks[1:], strict=False):
         assert prev.char_start < nxt.char_start < prev.char_end
         overlap_text = document_text[nxt.char_start : prev.char_end]
         overlap_tokens = len(encoder.encode(overlap_text))

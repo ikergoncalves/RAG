@@ -20,7 +20,9 @@ def client() -> Iterator[TestClient]:
         yield test_client
 
 
-def _patch_checks(monkeypatch: pytest.MonkeyPatch, *, postgres: str, qdrant: str, redis: str) -> None:
+def _patch_checks(
+    monkeypatch: pytest.MonkeyPatch, *, postgres: str, qdrant: str, redis: str
+) -> None:
     async def _postgres() -> str:
         return postgres
 
