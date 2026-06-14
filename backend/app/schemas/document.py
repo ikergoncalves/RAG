@@ -22,6 +22,8 @@ class ChunkRead(BaseModel):
     section_path: str | None
     char_start: int
     char_end: int
+    # Timestamp of the chunk's last successful upsert into Qdrant (None until indexed).
+    embedded_at: datetime | None
 
 
 class DocumentRead(BaseModel):
