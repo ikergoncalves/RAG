@@ -4,6 +4,7 @@
 - ``GET  /documents``        list documents with status
 - ``GET  /documents/{id}``   document details (+ chunk count)
 - ``GET  /documents/{id}/chunks``  list a document's chunks with metadata
+- ``POST /documents/{id}/index``   re-embed and re-index the document into Qdrant
 """
 
 import uuid
@@ -23,8 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_session
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
-from app.schemas.document import ChunkRead, DocumentDetail, DocumentRead
-from app.services import ingestion, storage
+from app.schemas.document import (
+    ChunkRead,
+    DocumentDetail,
+    DocumentRead,
+    IndexingResult,
+)
+from app.services import indexing, ingestion, storage
 from app.services.parsing import UnsupportedDocumentError, resolve_extension
 
 router = APIRouter(tags=["documents"])
@@ -102,3 +108,27 @@ async def list_document_chunks(
         select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.chunk_index)
     )
     return list(result.scalars().all())
+
+
+@router.post("/documents/{document_id}/index", response_model=IndexingResult)
+async def index_document(
+    document_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+) -> IndexingResult:
+    """Re-embed every chunk of a document and (re-)index it into Qdrant.
+
+    Idempotent: points are upserted by chunk id, so re-indexing never creates
+    duplicates. Returns ``503`` when no embedding provider is configured (e.g. a
+    missing ``OPENAI_API_KEY``).
+    """
+    document = await session.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    try:
+        indexed = await indexing.index_document(document_id, force=True)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    return IndexingResult(document_id=document_id, indexed_chunks=indexed)

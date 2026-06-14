@@ -40,3 +40,10 @@ class DocumentDetail(DocumentRead):
     """Document view with the number of persisted chunks."""
 
     chunk_count: int
+
+
+class IndexingResult(BaseModel):
+    """Outcome of a (re-)indexing run for a document."""
+
+    document_id: uuid.UUID
+    indexed_chunks: int
