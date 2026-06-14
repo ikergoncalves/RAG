@@ -158,4 +158,25 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   `GET /health` returns `200` with `{"status": "ok"}` and `postgres`, `qdrant`,
   and `redis` all reporting `"ok"` (confirmed both on the backend at `:8000` and
   through the frontend's nginx proxy at `:5173`).
-- ⬜ Later phases: ingestion, hybrid retrieval, cited generation, evaluation.
+- ✅ **Phase 1 — Ingestion & chunking with metadata**: `Document`/`Chunk`
+  models with Alembic migrations; parsers for PDF (`pypdf`), DOCX
+  (`python-docx`), Markdown (`markdown-it-py`) and HTML (`BeautifulSoup4`) that
+  preserve page numbers and heading breadcrumbs (`section_path`); token-based
+  chunking (`tiktoken`, ~400 tokens / ~50 overlap) that keeps
+  `page_number`/`section_path` and `char_start`/`char_end` offsets; and the
+  `POST /documents` (background processing), `GET /documents`,
+  `GET /documents/{id}`, `GET /documents/{id}/chunks` endpoints. Verified
+  end-to-end via docker-compose (upload → parse → chunk → `status=indexed`) and
+  10 unit tests covering parser metadata and chunk overlap/offsets.
+- ⬜ Later phases: embeddings + Qdrant indexing, hybrid retrieval + re-ranking,
+  cited generation, frontend, and evaluation.
+
+### API endpoints
+
+| Method & path                    | Description                                            |
+| -------------------------------- | ------------------------------------------------------ |
+| `GET /health`                    | App + dependency (Postgres/Qdrant/Redis) status        |
+| `POST /documents`                | Upload a PDF/DOCX/MD/HTML file; ingests in background   |
+| `GET /documents`                 | List uploaded documents with status                    |
+| `GET /documents/{id}`            | Document details + chunk count                          |
+| `GET /documents/{id}/chunks`     | List a document's chunks with citation metadata         |

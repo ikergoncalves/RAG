@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
 
+    # --- Ingestion / chunking --------------------------------------------
+    # Directory where uploaded source files are stored.
+    upload_dir: str = "var/uploads"
+    # Token-based chunking parameters (see app/services/chunking.py).
+    tiktoken_encoding: str = "cl100k_base"
+    chunk_size_tokens: int = 400
+    chunk_overlap_tokens: int = 50
+
     # --- Providers (consumed in later phases) ----------------------------
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
