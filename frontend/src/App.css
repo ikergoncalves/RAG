@@ -1,0 +1,85 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.header__inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.header__title {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--accent);
+}
+
+.header__tagline {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.container {
+  flex: 1;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.deps {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.deps__item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 8px;
+}
+
+.deps__name {
+  text-transform: capitalize;
+}
+
+.status {
+  font-weight: 600;
+}
+
+.status--ok {
+  color: var(--ok);
+}
+
+.status--down {
+  color: var(--down);
+}
