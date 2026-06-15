@@ -183,8 +183,21 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   uploading `sample.md` → `status=indexed`, every chunk's `embedded_at`
   populated, and the `chunks` collection holding a matching number of points
   with `dense` + `sparse` vectors).
-- ⬜ Later phases: hybrid retrieval + re-ranking, cited generation, frontend,
-  and evaluation.
+- ✅ **Phase 3 — Hybrid retrieval + re-ranking**: a `RetrievalService` that
+  embeds the query (dense + BM25 sparse), runs a hybrid Qdrant search — a
+  `dense` and a `sparse` `Prefetch` fused server-side with `FusionQuery`/RRF —
+  then re-ranks the fused candidates with a cross-encoder and returns the
+  top-`k`. Supports a `document_ids` payload filter, and each result carries
+  `chunk_id`, `document_id`, `document_filename`, `page_number`, `section_path`,
+  `content`, the RRF `score` and the `rerank_score`. Exposed via
+  `POST /retrieve` (internal/debug). The Qdrant server image was aligned to the
+  client (`v1.18.0`) so the Query API runs without the version-skew warning.
+  Covered by Qdrant-backed tests — including one that shows pure-dense search
+  missing an exact-keyword chunk that hybrid (RRF) recovers — plus a
+  cross-encoder re-ranking test; they skip when Qdrant is unavailable. The
+  reranker default and the rationale are documented under
+  [Re-ranking](#re-ranking).
+- ⬜ Later phases: cited generation, frontend, and evaluation.
 
 ### API endpoints
 
@@ -196,3 +209,24 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
 | `GET /documents/{id}`            | Document details + chunk count                          |
 | `GET /documents/{id}/chunks`     | List a document's chunks with citation metadata         |
 | `POST /documents/{id}/index`     | Re-embed and (re-)index a document into Qdrant (hybrid)  |
+| `POST /retrieve`                 | Hybrid search + re-ranking (internal/debug); scored chunks |
+
+### Re-ranking
+
+Retrieval is two-stage: a fast hybrid first stage (dense + BM25, fused with RRF
+in Qdrant) over-fetches ~20 candidates, then a **cross-encoder** re-scores each
+`(query, chunk)` pair jointly and the top-`k` are returned.
+
+The default cross-encoder is **`cross-encoder/ms-marco-MiniLM-L-6-v2`** (set via
+`RERANKER_MODEL`). It was chosen deliberately for this CPU-only Docker setup: at
+~80 MB it builds and downloads quickly and re-ranks ~20 candidates in
+milliseconds on CPU. Heavier rerankers such as `BAAI/bge-reranker-v2-m3` are
+more accurate but several times larger and noticeably slower to load and run
+without a GPU — overkill for a local/demo deployment. Swapping is trivial:
+`RERANKER_MODEL` accepts any `sentence-transformers` cross-encoder, so a
+GPU-backed deployment can opt into a stronger model with no code change.
+
+> Torch is installed from PyTorch's **CPU-only wheel index**
+> (`--extra-index-url https://download.pytorch.org/whl/cpu` in
+> `requirements.txt`) to avoid pulling multi-GB CUDA builds that this image
+> would never use.
