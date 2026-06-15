@@ -113,6 +113,48 @@ async def search_dense(
     return response.points
 
 
+async def search_hybrid(
+    collection_name: str,
+    *,
+    dense_vector: list[float],
+    sparse_vector: models.SparseVector,
+    limit: int = 20,
+    prefetch_limit: int = 20,
+    query_filter: models.Filter | None = None,
+    client: AsyncQdrantClient | None = None,
+    with_payload: bool = True,
+) -> list[models.ScoredPoint]:
+    """Hybrid dense + sparse (BM25) search fused with Reciprocal Rank Fusion.
+
+    Each branch (``dense`` and ``sparse``) independently retrieves its top
+    ``prefetch_limit`` points; Qdrant then fuses the two ranked lists server-side
+    with RRF and returns the top ``limit`` fused candidates. ``query_filter`` is
+    applied inside both prefetch branches so payload filters (e.g. by
+    ``document_id``) constrain each branch before fusion.
+    """
+    response = await _client(client).query_points(
+        collection_name=collection_name,
+        prefetch=[
+            models.Prefetch(
+                query=dense_vector,
+                using=DENSE_VECTOR_NAME,
+                limit=prefetch_limit,
+                filter=query_filter,
+            ),
+            models.Prefetch(
+                query=sparse_vector,
+                using=SPARSE_VECTOR_NAME,
+                limit=prefetch_limit,
+                filter=query_filter,
+            ),
+        ],
+        query=models.FusionQuery(fusion=models.Fusion.RRF),
+        limit=limit,
+        with_payload=with_payload,
+    )
+    return response.points
+
+
 class Bm25SparseEmbedder:
     """Produces BM25 sparse vectors via FastEmbed.
 

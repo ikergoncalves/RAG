@@ -20,3 +20,12 @@ tiktoken>=0.7,<1.0
 # Embeddings & vector indexing
 openai>=1.30,<2.0
 fastembed>=0.3,<1.0
+
+# Retrieval re-ranking (cross-encoder).
+# Torch is resolved from PyTorch's CPU-only wheel index so we don't pull the
+# multi-GB CUDA build, which is useless on this CPU-only Docker image. The
+# "+cpu" local-version wheels on this index outrank the plain PyPI wheels for
+# the same release, so a flexible spec still lands on a CPU build.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.2,<3.0
+sentence-transformers>=3.0,<6.0
