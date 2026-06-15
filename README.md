@@ -202,7 +202,33 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   "top_k": 3}` returned the `Chapter 2 > Section 2.1` chunk on top — with the
   highest `rerank_score` (clearly separated from the rest) and the RRF `score`,
   `document_filename`, `section_path` and `content` all populated correctly.
-- ⬜ Later phases: cited generation, frontend, and evaluation.
+- ✅ **Phase 4 — Cited generation**: a swappable `LLMProvider` (Anthropic
+  implementation) with two stages — `generate_answer` streams a plain-text answer
+  grounded only in the numbered context chunks, inserting `[n]` markers where each
+  source is used; `extract_citations` runs a separate, forced tool-use call that
+  returns `{number, chunk_id, quote}` objects, dropping any unknown `chunk_id` and
+  repairing each `quote` to the exact verbatim span in its chunk (the model
+  normalizes the chunk's hard line-wrap newlines into spaces when quoting, so the
+  span is snapped back for offset-accurate highlighting). A `ChatService` ties
+  retrieval and generation together: it creates a `Conversation` and persists the
+  user/assistant `Message`s (migration `0003`), short-circuits to a fixed
+  "I don't have enough information…" answer **without calling the LLM** when
+  retrieval is empty (zero token cost), and enriches each citation with
+  `document_id`/`document_name`/`page`/`section`. Exposed via `POST /chat`
+  (Server-Sent Events: a stream of `delta` events then a terminal `citations`
+  event; `503` without `ANTHROPIC_API_KEY`). Models are configurable
+  (`generation_model` default `claude-sonnet-4-6`, `citation_extraction_model`
+  default `claude-haiku-4-5-20251001`). Covered by unit tests over in-memory
+  SQLite with a fake provider (streaming/persistence, conversation reuse, the
+  no-chunks short-circuit, the verbatim-quote repair) plus real-Anthropic
+  integration tests that skip without a key. Verified end-to-end via
+  docker-compose with **real Claude**: uploading `sample.md` → `status=indexed`,
+  then `POST /chat` (via `curl -N`) for "What does section 2.1 discuss?" streamed
+  the answer incrementally (multiple `delta` events over ~2 s) and returned
+  citations whose `quote`s are exact, newline-accurate substrings of the cited
+  chunk; an unrelated question returned the "I don't have enough information…"
+  refusal with no citations.
+- ⬜ Later phases: frontend and evaluation.
 
 ### API endpoints
 
@@ -215,6 +241,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
 | `GET /documents/{id}/chunks`     | List a document's chunks with citation metadata         |
 | `POST /documents/{id}/index`     | Re-embed and (re-)index a document into Qdrant (hybrid)  |
 | `POST /retrieve`                 | Hybrid search + re-ranking (internal/debug); scored chunks |
+| `POST /chat`                     | Cited answer generation over SSE (`delta` stream + `citations`) |
 
 ### Re-ranking
 
