@@ -24,7 +24,11 @@ services:
       retries: 10
 
   qdrant:
-    image: qdrant/qdrant:v1.12.0
+    # Pinned to match the installed qdrant-client (1.18). Hybrid retrieval uses
+    # the Query API (Prefetch + FusionQuery/RRF); a large client/server minor
+    # gap makes the client emit a hard incompatibility warning, so the server
+    # is kept within one minor of the client.
+    image: qdrant/qdrant:v1.18.0
     ports:
       - "${QDRANT_PORT:-6333}:6333"
       - "${QDRANT_GRPC_PORT:-6334}:6334"
