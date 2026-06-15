@@ -293,6 +293,23 @@ def test_existing_conversation_id_is_reused() -> None:
     _run(body)
 
 
+def test_snap_quote_repairs_normalized_whitespace() -> None:
+    """A quote whose chunk newlines were normalized to spaces snaps back to the
+    exact verbatim span; an exact substring is unchanged; a paraphrase is None."""
+    from app.services.llm.anthropic_provider import _snap_quote_to_content
+
+    content = "split long sections like this\none into several overlapping chunks"
+
+    # The model collapsed the chunk's hard line-wrap newline into a space.
+    snapped = _snap_quote_to_content("like this one into several", content)
+    assert snapped == "like this\none into several"
+    assert snapped in content  # repaired quote is a true substring
+
+    exact = _snap_quote_to_content("several overlapping chunks", content)
+    assert exact == "several overlapping chunks"
+    assert _snap_quote_to_content("entirely different words", content) is None
+
+
 # --- Integration tests: real Anthropic provider --------------------------
 
 
@@ -312,8 +329,10 @@ def test_real_anthropic_covered_question_yields_verbatim_citations() -> None:
         engine, factory = await _make_session_factory()
         chunks = [
             _chunk(
-                "The Eiffel Tower is a wrought-iron lattice tower in Paris, completed in 1889 "
-                "for the World's Fair.",
+                # Hard line-wrap newline mid-content: the model normalizes it to a
+                # space when quoting, so this exercises the verbatim-snap repair.
+                "The Eiffel Tower is a wrought-iron lattice tower in Paris,\n"
+                "completed in 1889 for the World's Fair.",
                 filename="paris.md",
                 page=1,
                 section="Landmarks",

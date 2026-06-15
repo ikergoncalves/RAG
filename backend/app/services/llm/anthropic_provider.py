@@ -11,6 +11,7 @@ Nothing about the Anthropic SDK leaks past this module: callers depend only on
 """
 
 import logging
+import re
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
@@ -127,7 +128,9 @@ class AnthropicLLMProvider(LLMProvider):
     async def extract_citations(
         self, question: str, answer: str, context_chunks: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        known_chunk_ids = {str(chunk["chunk_id"]) for chunk in context_chunks}
+        content_by_id = {
+            str(chunk["chunk_id"]): chunk.get("content", "") for chunk in context_chunks
+        }
         user_message = (
             f"{_format_context_with_ids(context_chunks)}\n\n"
             f"Question: {question}\n\n"
@@ -146,17 +149,27 @@ class AnthropicLLMProvider(LLMProvider):
         citations: list[dict[str, Any]] = []
         for item in raw:
             chunk_id = str(item.get("chunk_id", ""))
-            if chunk_id not in known_chunk_ids:
+            if chunk_id not in content_by_id:
                 logger.warning(
                     "Discarding citation with unknown chunk_id %r (not in context)",
                     chunk_id,
                 )
                 continue
+            quote = item.get("quote", "")
+            # Repair the quote to the exact verbatim span in the chunk: models
+            # tend to normalize the chunk's hard line-wrap newlines into spaces,
+            # which would break a strict substring check used for highlighting.
+            snapped = _snap_quote_to_content(quote, content_by_id[chunk_id])
+            if snapped is None:
+                logger.warning(
+                    "Citation quote not found verbatim in chunk %s; keeping model quote",
+                    chunk_id,
+                )
             citations.append(
                 {
                     "number": item.get("number"),
                     "chunk_id": chunk_id,
-                    "quote": item.get("quote", ""),
+                    "quote": snapped if snapped is not None else quote,
                 }
             )
         return citations
@@ -178,6 +191,29 @@ def _format_context_with_ids(context_chunks: list[dict[str, Any]]) -> str:
         for index, chunk in enumerate(context_chunks, start=1)
     ]
     return "Context passages:\n\n" + "\n\n".join(blocks)
+
+
+def _snap_quote_to_content(quote: str, content: str) -> str | None:
+    """Return the exact substring of ``content`` corresponding to ``quote``.
+
+    Models tend to normalize whitespace when quoting — most commonly collapsing
+    the hard line-wrap newlines inside a chunk into spaces — which makes the
+    quote fail a strict substring check against the stored chunk text and breaks
+    offset-based highlighting in the source viewer. This repairs such quotes by
+    matching the quote's tokens against ``content`` with flexible whitespace and
+    returning the verbatim span (or ``None`` when the tokens are not found, e.g.
+    a paraphrased or hallucinated quote).
+    """
+    if not quote or not content:
+        return None
+    if quote in content:
+        return quote
+    tokens = quote.split()
+    if not tokens:
+        return None
+    pattern = r"\s+".join(re.escape(token) for token in tokens)
+    match = re.search(pattern, content)
+    return match.group(0) if match else None
 
 
 def _extract_tool_citations(response: Any) -> list[dict[str, Any]]:
