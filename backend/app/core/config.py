@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     # FastEmbed model used to produce sparse (BM25) vectors for hybrid search.
     sparse_embedding_model: str = "Qdrant/bm25"
 
+    # --- Retrieval / re-ranking ------------------------------------------
+    # Cross-encoder used to re-rank hybrid-search candidates. The default is a
+    # small, CPU-friendly model (~80 MB) that reranks in milliseconds on the
+    # CPU-only Docker image; swap it via this setting for a heavier model such
+    # as BAAI/bge-reranker-v2-m3 when a GPU / more throughput is available.
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Candidates pulled by each prefetch branch (dense, sparse) before RRF fusion.
+    retrieval_prefetch_limit: int = 20
+    # Number of fused candidates handed to the cross-encoder for re-ranking.
+    retrieval_candidates: int = 20
+    # Default number of chunks returned after re-ranking.
+    retrieval_top_k: int = 5
+
     # --- Redis -----------------------------------------------------------
     redis_host: str = "localhost"
     redis_port: int = 6379

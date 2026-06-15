@@ -13,6 +13,7 @@ from app.services.vector_store.qdrant_client import (
     ensure_collection,
     get_default_sparse_embedder,
     search_dense,
+    search_hybrid,
     upsert_points,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "ensure_collection",
     "get_default_sparse_embedder",
     "search_dense",
+    "search_hybrid",
     "upsert_points",
 ]
