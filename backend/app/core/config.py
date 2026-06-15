@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     # Default number of chunks returned after re-ranking.
     retrieval_top_k: int = 5
 
+    # --- Generation (Claude) ---------------------------------------------
+    # Model used to stream the cited answer from the retrieved context.
+    generation_model: str = "claude-sonnet-4-6"
+    # Smaller/cheaper model used for the (non-streaming) tool-use call that
+    # extracts verbatim citation quotes from the generated answer.
+    citation_extraction_model: str = "claude-haiku-4-5-20251001"
+
     # --- Redis -----------------------------------------------------------
     redis_host: str = "localhost"
     redis_port: int = 6379
