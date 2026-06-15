@@ -196,7 +196,12 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   missing an exact-keyword chunk that hybrid (RRF) recovers — plus a
   cross-encoder re-ranking test; they skip when Qdrant is unavailable. The
   reranker default and the rationale are documented under
-  [Re-ranking](#re-ranking).
+  [Re-ranking](#re-ranking). Verified end-to-end via docker-compose on the new
+  Qdrant `v1.18.0` image (fresh volume): uploading `sample.md` → `status=indexed`,
+  then `POST /retrieve` with `{"query": "What does section 2.1 discuss?",
+  "top_k": 3}` returned the `Chapter 2 > Section 2.1` chunk on top — with the
+  highest `rerank_score` (clearly separated from the rest) and the RRF `score`,
+  `document_filename`, `section_path` and `content` all populated correctly.
 - ⬜ Later phases: cited generation, frontend, and evaluation.
 
 ### API endpoints
