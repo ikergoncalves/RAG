@@ -333,8 +333,7 @@ def test_real_anthropic_covered_question_yields_verbatim_citations() -> None:
 
         try:
             items = [
-                item
-                async for item in service.ask("When was the Eiffel Tower completed?", None)
+                item async for item in service.ask("When was the Eiffel Tower completed?", None)
             ]
             final = items[-1]
             assert final["type"] == "citations"

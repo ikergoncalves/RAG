@@ -108,9 +108,7 @@ class ChatService:
                 session.add(conversation)
                 await session.flush()
                 conversation_id = conversation.id
-            session.add(
-                Message(conversation_id=conversation_id, role=_USER_ROLE, content=question)
-            )
+            session.add(Message(conversation_id=conversation_id, role=_USER_ROLE, content=question))
             await session.commit()
         return conversation_id
 
