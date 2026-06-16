@@ -146,6 +146,7 @@ npm run dev      # http://localhost:5173, proxies /health + /api to :8000
 | Frontend tests       | `cd frontend && npm run test`                              |
 | Frontend type-check  | `cd frontend && npm run build`                             |
 | Full stack (Docker)  | `docker-compose -f infra/docker-compose.yml up --build`    |
+| RAGAS evaluation     | `make eval` (stack must be running — see [Evaluation](#evaluation)) |
 
 ## Status
 
@@ -259,7 +260,24 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   `GET /api/chunks/{id}`; a follow-up question reused the same `conversation_id`;
   and deleting the document returned `204`, emptied the list, and cascaded the
   chunk to `404`.
-- ⬜ Later phases: evaluation (RAGAS), observability/cost, and deploy/CI-CD.
+- 🧪 **Phase 6 — Evaluation (RAGAS)**: an evaluation harness under `eval/` that
+  scores the live pipeline over HTTP (no backend imports). `eval/dataset.json`
+  holds 20 questions grounded in the test fixtures (`sample.md`/`.pdf`/`.docx`/
+  `.html`), 4 of them intentionally unanswerable to probe faithfulness and the
+  "I don't know" refusal. `eval/run_ragas.py` streams `POST /chat` for each
+  question, builds `contexts` from the cited chunks (`GET /chunks/{id}`), and
+  scores `faithfulness`, `answer_relevancy`, `context_precision` and
+  `context_recall` via RAGAS (OpenAI judge), plus a custom `citation_accuracy`
+  (each citation's `quote` must be a verbatim substring of its referenced
+  chunk). It writes `eval/results/report.{json,md}` and prints an aggregate
+  summary. Run it with `make eval` (stack up) or trigger the manual
+  `RAGAS evaluation` GitHub Action (`.github/workflows/eval.yml`), which boots
+  the compose stack, indexes the fixtures, and uploads the report as an
+  artifact. See [Evaluation](#evaluation). _Harness verified by unit-checking its
+  parsing/scoring/reporting helpers; the full RAGAS run requires a live stack
+  plus `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, so it has not been executed in this
+  environment yet._
+- ⬜ Later phases: observability/cost, and deploy/CI-CD.
 
 ### API endpoints
 
@@ -295,3 +313,74 @@ GPU-backed deployment can opt into a stronger model with no code change.
 > (`--extra-index-url https://download.pytorch.org/whl/cpu` in
 > `requirements.txt`) to avoid pulling multi-GB CUDA builds that this image
 > would never use.
+
+## Evaluation
+
+The RAG quality is measured with [RAGAS](https://docs.ragas.io) plus a custom
+citation metric. The harness lives in [`eval/`](eval/) and talks to a **running
+stack over HTTP only** (it never imports backend code), so it runs from its own
+virtualenv against any deployment.
+
+For each question in [`eval/dataset.json`](eval/dataset.json) it streams
+`POST /chat`, reads the answer and the structured `citations`, and rebuilds the
+`contexts` from the **cited** chunks by fetching each `GET /chunks/{id}`. The
+dataset holds **20 questions** grounded in the test fixtures
+(`backend/tests/fixtures/sample.{md,pdf,docx,html}`), including **4 questions
+that the documents intentionally do not answer** — these probe whether the
+system refuses ("I don't have enough information…") instead of hallucinating.
+
+### Metrics
+
+| Metric | What it measures here |
+| --- | --- |
+| **faithfulness** | Is every claim in the answer supported by the retrieved (cited) context? Low scores flag hallucination. The unanswerable questions should produce a refusal with no unsupported claims. |
+| **answer_relevancy** | Does the answer actually address the question (vs. being off-topic or padded)? Computed from the generated answer against the question via embeddings. |
+| **context_precision** | Of the context we surfaced (the cited chunks), how much is actually relevant to the ground-truth answer? Penalises citing noise. |
+| **context_recall** | Does the cited context cover everything the ground-truth answer needs? Low scores point at retrieval misses. (Use `expected_chunk_ids` in the dataset for manual recall analysis.) |
+| **citation_accuracy** (custom) | The share of returned citations whose `quote` is a verbatim (whitespace-normalised) substring of the referenced chunk's `content`. This is the project's headline guarantee — every `[n]` marker must be backed by a real, locatable quote — checked directly rather than via an LLM judge. Reported both as a mean per question and pooled over all citations. |
+
+> RAGAS scores answers with an **LLM judge** (OpenAI by default) and uses
+> embeddings for `answer_relevancy`, so `OPENAI_API_KEY` is required.
+> `citation_accuracy` is pure string matching and needs no LLM.
+
+The run writes [`eval/results/report.json`](eval/results/) (per-question +
+aggregate scores) and `report.md` (a readable summary that highlights the
+**three worst questions by faithfulness** for analysis), and prints the
+aggregate scores to stdout.
+
+### Running it locally
+
+The stack must be up and the fixtures indexed. API keys are read from the
+repo-root `.env` automatically (`OPENAI_API_KEY` for the RAGAS judge,
+`ANTHROPIC_API_KEY` for the backend's generation).
+
+```bash
+# 1. Start the full stack
+docker-compose -f infra/docker-compose.yml up --build -d
+
+# 2. Install the eval dependencies (one-off, into eval/.venv)
+make eval-install
+
+# 3. Run the evaluation (verifies /health, indexes the fixtures, scores them)
+make eval
+```
+
+`make eval` checks `GET /health`, (idempotently) uploads + indexes the four
+fixtures, then runs the evaluation. Without `make` (e.g. plain Windows Git Bash)
+use the equivalent shell script:
+
+```bash
+bash eval/run.sh
+```
+
+Point the harness at a non-default backend with `RAG_API_BASE_URL`
+(default `http://localhost:8000`), e.g. `make eval BASE_URL=http://host:8000`.
+
+### In CI
+
+[`.github/workflows/eval.yml`](.github/workflows/eval.yml) runs the evaluation
+on demand (`workflow_dispatch` — it is **not** part of the per-push CI because it
+spends OpenAI/Anthropic credits). Trigger it from the Actions tab; it boots the
+docker-compose stack, indexes the fixtures, runs `eval/run_ragas.py`, and
+publishes `eval/results/report.md` (and `report.json`) as a workflow artifact.
+It needs the repository secrets `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`.
