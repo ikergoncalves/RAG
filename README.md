@@ -228,7 +228,27 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   citations whose `quote`s are exact, newline-accurate substrings of the cited
   chunk; an unrelated question returned the "I don't have enough information…"
   refusal with no citations.
-- ⬜ Later phases: frontend and evaluation.
+- ✅ **Phase 5 — Frontend: chat + clickable citations**: a React + Vite + TS SPA
+  (React Router) with two pages. **Chat** streams the answer live by reading the
+  `POST /chat` SSE body (`fetch` + `ReadableStream`, accumulating `delta` text);
+  once the terminal `citations` event arrives, `CitedAnswer` parses the `[n]`
+  markers and renders each as a clickable badge. Clicking a badge opens the
+  **`SourceViewer`** side panel, which fetches the full chunk via the new
+  `GET /chunks/{id}` and highlights the cited `quote` inside the passage. The
+  `conversation_id` from the first turn is threaded into subsequent calls for a
+  continuous conversation. **Documents** supports drag-and-drop / file-picker
+  upload (`POST /documents`), a table of documents with status, chunk count and
+  upload time (light 3 s polling so `pending → processing → indexed/failed`
+  updates live), and deletion via the new `DELETE /documents/{id}` (cascades to
+  chunks, best-effort cleanup of the Qdrant points and the stored source file).
+  Backend tests cover `GET /chunks/{id}` and the delete cascade over in-memory
+  SQLite (ASGI transport, Qdrant/filesystem stubbed); each new frontend component
+  has a Vitest test (React Testing Library + stubbed `fetch`, including a
+  `ReadableStream` SSE double). `npm run test`, `npm run lint` and `npm run build`
+  all pass. Dev (Vite) and Docker (nginx) proxies forward the new `/documents`,
+  `/chunks` and `/chat` paths (SSE buffering disabled in nginx). End-to-end
+  verification via `docker-compose up` is the remaining step before merge.
+- ⬜ Later phases: evaluation (RAGAS), observability/cost, and deploy/CI-CD.
 
 ### API endpoints
 
@@ -238,8 +258,10 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
 | `POST /documents`                | Upload a PDF/DOCX/MD/HTML file; ingests in background   |
 | `GET /documents`                 | List uploaded documents with status                    |
 | `GET /documents/{id}`            | Document details + chunk count                          |
+| `DELETE /documents/{id}`         | Delete a document (cascades to chunks; clears vectors + file) |
 | `GET /documents/{id}/chunks`     | List a document's chunks with citation metadata         |
 | `POST /documents/{id}/index`     | Re-embed and (re-)index a document into Qdrant (hybrid)  |
+| `GET /chunks/{id}`               | Fetch a single chunk by id (source viewer)             |
 | `POST /retrieve`                 | Hybrid search + re-ranking (internal/debug); scored chunks |
 | `POST /chat`                     | Cited answer generation over SSE (`delta` stream + `citations`) |
 
