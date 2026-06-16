@@ -172,9 +172,7 @@ async def index_document(
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkRead)
-async def get_chunk(
-    chunk_id: uuid.UUID, session: AsyncSession = Depends(get_session)
-) -> Chunk:
+async def get_chunk(chunk_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> Chunk:
     """Return a single chunk with its full citation metadata.
 
     Backs the source viewer: given a citation's ``chunk_id`` the frontend fetches
