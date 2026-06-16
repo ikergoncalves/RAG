@@ -1,5 +1,9 @@
 // Thin client for the backend API. Requests use same-origin paths that are
-// proxied to the backend by Vite (dev) or nginx (Docker).
+// proxied to the backend by Vite (dev) or nginx (Docker). App endpoints live
+// under `/api` so they never collide with the client-side routes (e.g. the
+// `/documents` SPA route vs the `/documents` REST resource).
+
+const API = '/api'
 
 export interface AppInfo {
   name: string
@@ -55,7 +59,7 @@ export interface ChunkRead {
 }
 
 export async function listDocuments(): Promise<DocumentRead[]> {
-  const response = await fetch('/documents')
+  const response = await fetch(`${API}/documents`)
   if (!response.ok) {
     throw new Error(`Listing documents failed with status ${response.status}`)
   }
@@ -63,7 +67,7 @@ export async function listDocuments(): Promise<DocumentRead[]> {
 }
 
 export async function getDocument(id: string): Promise<DocumentDetail> {
-  const response = await fetch(`/documents/${id}`)
+  const response = await fetch(`${API}/documents/${id}`)
   if (!response.ok) {
     throw new Error(`Fetching document ${id} failed with status ${response.status}`)
   }
@@ -73,7 +77,7 @@ export async function getDocument(id: string): Promise<DocumentDetail> {
 export async function uploadDocument(file: File): Promise<DocumentRead> {
   const form = new FormData()
   form.append('file', file)
-  const response = await fetch('/documents', { method: 'POST', body: form })
+  const response = await fetch(`${API}/documents`, { method: 'POST', body: form })
   if (!response.ok) {
     const detail = await readErrorDetail(response)
     throw new Error(detail ?? `Upload failed with status ${response.status}`)
@@ -82,14 +86,14 @@ export async function uploadDocument(file: File): Promise<DocumentRead> {
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  const response = await fetch(`/documents/${id}`, { method: 'DELETE' })
+  const response = await fetch(`${API}/documents/${id}`, { method: 'DELETE' })
   if (!response.ok) {
     throw new Error(`Deleting document ${id} failed with status ${response.status}`)
   }
 }
 
 export async function getChunk(id: string): Promise<ChunkRead> {
-  const response = await fetch(`/chunks/${id}`)
+  const response = await fetch(`${API}/chunks/${id}`)
   if (!response.ok) {
     throw new Error(`Fetching chunk ${id} failed with status ${response.status}`)
   }
@@ -132,7 +136,7 @@ export async function streamChat(
   handlers: ChatStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch('/chat', {
+  const response = await fetch(`${API}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, conversation_id: conversationId }),

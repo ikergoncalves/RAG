@@ -45,7 +45,7 @@ describe('SourceViewer', () => {
 
     const highlighted = await waitFor(() => screen.getByText('Paris is the capital of France.'))
     expect(highlighted.tagName).toBe('MARK')
-    expect(global.fetch).toHaveBeenCalledWith('/chunks/chunk-1')
+    expect(global.fetch).toHaveBeenCalledWith('/api/chunks/chunk-1')
   })
 
   it('calls onClose when the close button is clicked', async () => {

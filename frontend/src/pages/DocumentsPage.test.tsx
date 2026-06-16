@@ -23,10 +23,10 @@ function stubBackend() {
     const url = typeof input === 'string' ? input : input.toString()
     const method = init?.method ?? 'GET'
 
-    if (url === '/documents' && method === 'GET') {
+    if (url === '/api/documents' && method === 'GET') {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(docs) })
     }
-    if (url.startsWith('/documents/') && method === 'GET') {
+    if (url.startsWith('/api/documents/') && method === 'GET') {
       const id = url.split('/').pop()
       const doc = docs.find((d) => d.id === id)
       if (!doc) return Promise.resolve({ ok: false, status: 404 })
@@ -36,7 +36,7 @@ function stubBackend() {
         json: () => Promise.resolve({ ...doc, chunk_count: 5 }),
       })
     }
-    if (url.startsWith('/documents/') && method === 'DELETE') {
+    if (url.startsWith('/api/documents/') && method === 'DELETE') {
       const id = url.split('/').pop()
       docs = docs.filter((d) => d.id !== id)
       return Promise.resolve({ ok: true, status: 204 })
@@ -66,7 +66,7 @@ describe('DocumentsPage', () => {
 
     await waitFor(() => expect(screen.queryByText('guide.md')).not.toBeInTheDocument())
     expect(fetchMock).toHaveBeenCalledWith(
-      '/documents/d1',
+      '/api/documents/d1',
       expect.objectContaining({ method: 'DELETE' }),
     )
   })

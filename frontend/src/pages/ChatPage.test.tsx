@@ -49,7 +49,7 @@ function stubFetch(): void {
     'fetch',
     vi.fn((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
-      if (url === '/chat') {
+      if (url === '/api/chat') {
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -60,7 +60,7 @@ function stubFetch(): void {
           ]),
         })
       }
-      if (url.startsWith('/chunks/')) {
+      if (url.startsWith('/api/chunks/')) {
         return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(chunk) })
       }
       return Promise.reject(new Error(`unexpected fetch: ${url}`))
@@ -87,7 +87,7 @@ describe('ChatPage', () => {
     // Clicking the citation opens the source viewer for that chunk.
     fireEvent.click(badge)
     expect(await screen.findByRole('dialog', { name: /source viewer/i })).toBeInTheDocument()
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/chunks/chunk-1'))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/chunks/chunk-1'))
   })
 
   it('disables the Send button while there is no input', () => {
