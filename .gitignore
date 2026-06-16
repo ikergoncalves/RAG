@@ -18,6 +18,10 @@ htmlcov/
 # Local runtime data (uploaded source files)
 var/
 
+# Eval outputs (generated reports; keep the directory via .gitkeep)
+eval/results/*
+!eval/results/.gitkeep
+
 # Node
 node_modules/
 dist/
