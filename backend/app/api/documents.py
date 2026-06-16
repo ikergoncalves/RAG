@@ -1,12 +1,15 @@
 """Document ingestion endpoints.
 
-- ``POST /documents``        upload a file; processing runs in the background
-- ``GET  /documents``        list documents with status
-- ``GET  /documents/{id}``   document details (+ chunk count)
-- ``GET  /documents/{id}/chunks``  list a document's chunks with metadata
-- ``POST /documents/{id}/index``   re-embed and re-index the document into Qdrant
+- ``POST   /documents``        upload a file; processing runs in the background
+- ``GET    /documents``        list documents with status
+- ``GET    /documents/{id}``   document details (+ chunk count)
+- ``DELETE /documents/{id}``   remove a document (chunks, vectors and file)
+- ``GET    /documents/{id}/chunks``  list a document's chunks with metadata
+- ``POST   /documents/{id}/index``   re-embed and re-index the document into Qdrant
+- ``GET    /chunks/{id}``      fetch a single chunk by id (source viewer)
 """
 
+import logging
 import uuid
 
 from fastapi import (
@@ -21,6 +24,7 @@ from fastapi import (
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import get_session
 from app.models.chunk import Chunk
 from app.models.document import Document, DocumentStatus
@@ -30,8 +34,10 @@ from app.schemas.document import (
     DocumentRead,
     IndexingResult,
 )
-from app.services import indexing, ingestion, storage
+from app.services import indexing, ingestion, storage, vector_store
 from app.services.parsing import UnsupportedDocumentError, resolve_extension
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["documents"])
 
@@ -96,6 +102,37 @@ async def get_document(
     )
 
 
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+) -> None:
+    """Delete a document together with its chunks, vectors and source file.
+
+    The chunk rows are removed by the ``ON DELETE CASCADE`` on the foreign key.
+    Removing the Qdrant points and the on-disk file is best-effort: a failure
+    there is logged but does not block deletion of the document record (the
+    vectors would otherwise be orphaned but unreachable, and a stale file is
+    harmless).
+    """
+    document = await session.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    filename = document.filename
+    await session.delete(document)
+    await session.commit()
+
+    try:
+        await vector_store.delete_document_points(settings.qdrant_collection, str(document_id))
+    except Exception:
+        logger.exception("Failed to delete Qdrant points for document %s", document_id)
+
+    try:
+        storage.delete_upload(document_id, filename)
+    except OSError:
+        logger.exception("Failed to delete source file for document %s", document_id)
+
+
 @router.get("/documents/{document_id}/chunks", response_model=list[ChunkRead])
 async def list_document_chunks(
     document_id: uuid.UUID, session: AsyncSession = Depends(get_session)
@@ -132,3 +169,17 @@ async def index_document(
         ) from exc
 
     return IndexingResult(document_id=document_id, indexed_chunks=indexed)
+
+
+@router.get("/chunks/{chunk_id}", response_model=ChunkRead)
+async def get_chunk(chunk_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> Chunk:
+    """Return a single chunk with its full citation metadata.
+
+    Backs the source viewer: given a citation's ``chunk_id`` the frontend fetches
+    the chunk's content (and ``char_start``/``char_end``) to display the original
+    passage with the cited quote highlighted.
+    """
+    chunk = await session.get(Chunk, chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chunk not found")
+    return chunk

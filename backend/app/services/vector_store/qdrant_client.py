@@ -94,6 +94,34 @@ async def count_points(collection_name: str, *, client: AsyncQdrantClient | None
     return result.count
 
 
+async def delete_document_points(
+    collection_name: str,
+    document_id: str,
+    *,
+    client: AsyncQdrantClient | None = None,
+    wait: bool = True,
+) -> None:
+    """Delete every point belonging to ``document_id`` (matched on the payload).
+
+    Used when a document is removed so its chunks no longer surface in search.
+    Idempotent: deleting a document with no indexed points is a no-op.
+    """
+    await _client(client).delete(
+        collection_name=collection_name,
+        points_selector=models.FilterSelector(
+            filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchValue(value=document_id),
+                    )
+                ]
+            )
+        ),
+        wait=wait,
+    )
+
+
 async def search_dense(
     collection_name: str,
     query_vector: list[float],

@@ -26,3 +26,8 @@ def save_upload(document_id: uuid.UUID, filename: str, data: bytes) -> Path:
     path = storage_path(document_id, filename)
     path.write_bytes(data)
     return path
+
+
+def delete_upload(document_id: uuid.UUID, filename: str) -> None:
+    """Remove a document's stored source file. Missing files are ignored."""
+    storage_path(document_id, filename).unlink(missing_ok=True)

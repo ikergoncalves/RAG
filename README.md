@@ -228,7 +228,38 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   citations whose `quote`s are exact, newline-accurate substrings of the cited
   chunk; an unrelated question returned the "I don't have enough information…"
   refusal with no citations.
-- ⬜ Later phases: frontend and evaluation.
+- ✅ **Phase 5 — Frontend: chat + clickable citations**: a React + Vite + TS SPA
+  (React Router) with two pages. **Chat** streams the answer live by reading the
+  `POST /chat` SSE body (`fetch` + `ReadableStream`, accumulating `delta` text);
+  once the terminal `citations` event arrives, `CitedAnswer` parses the `[n]`
+  markers and renders each as a clickable badge. Clicking a badge opens the
+  **`SourceViewer`** side panel, which fetches the full chunk via the new
+  `GET /chunks/{id}` and highlights the cited `quote` inside the passage. The
+  `conversation_id` from the first turn is threaded into subsequent calls for a
+  continuous conversation. **Documents** supports drag-and-drop / file-picker
+  upload (`POST /documents`), a table of documents with status, chunk count and
+  upload time (light 3 s polling so `pending → processing → indexed/failed`
+  updates live), and deletion via the new `DELETE /documents/{id}` (cascades to
+  chunks, best-effort cleanup of the Qdrant points and the stored source file).
+  Backend tests cover `GET /chunks/{id}` and the delete cascade over in-memory
+  SQLite (ASGI transport, Qdrant/filesystem stubbed); each new frontend component
+  has a Vitest test (React Testing Library + stubbed `fetch`, including a
+  `ReadableStream` SSE double). `npm run test`, `npm run lint` and `npm run build`
+  all pass. The browser calls the backend under an `/api` prefix that the Vite
+  dev proxy and the nginx (Docker) config strip before forwarding, so the REST
+  resources never shadow the client-side routes (e.g. the `/documents` SPA route
+  vs the `/documents` resource); nginx disables response buffering on `/api` so
+  the `/chat` stream is delivered incrementally. Verified end-to-end via
+  `docker-compose up --wait` (all services healthy, `alembic current` at `0003`):
+  through the nginx origin on `:5173`, navigating to `/documents` serves the SPA
+  while `/api/documents` returns JSON; uploading `sample.md` polled
+  `pending → processing → indexed` (3 chunks); asking "What does section 2.1
+  discuss?" streamed the answer over 6 `delta` events then returned `[n]`
+  citations whose `quote`s are verbatim substrings of the cited chunk fetched via
+  `GET /api/chunks/{id}`; a follow-up question reused the same `conversation_id`;
+  and deleting the document returned `204`, emptied the list, and cascaded the
+  chunk to `404`.
+- ⬜ Later phases: evaluation (RAGAS), observability/cost, and deploy/CI-CD.
 
 ### API endpoints
 
@@ -238,8 +269,10 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
 | `POST /documents`                | Upload a PDF/DOCX/MD/HTML file; ingests in background   |
 | `GET /documents`                 | List uploaded documents with status                    |
 | `GET /documents/{id}`            | Document details + chunk count                          |
+| `DELETE /documents/{id}`         | Delete a document (cascades to chunks; clears vectors + file) |
 | `GET /documents/{id}/chunks`     | List a document's chunks with citation metadata         |
 | `POST /documents/{id}/index`     | Re-embed and (re-)index a document into Qdrant (hybrid)  |
+| `GET /chunks/{id}`               | Fetch a single chunk by id (source viewer)             |
 | `POST /retrieve`                 | Hybrid search + re-ranking (internal/debug); scored chunks |
 | `POST /chat`                     | Cited answer generation over SSE (`delta` stream + `citations`) |
 
