@@ -1,0 +1,106 @@
+{
+  "description": "RAGAS evaluation dataset for the RAG pipeline. Questions are grounded in the test fixtures under backend/tests/fixtures/ (sample.md, sample.pdf, sample.docx, sample.html). Each entry: question, ground_truth, expected_chunk_ids (left empty for now; used for manual context_recall analysis). The last four questions are intentionally NOT answerable from the documents, to exercise faithfulness and the model's 'I don't know' behaviour.",
+  "refusal_answer": "I don't have enough information to answer this question.",
+  "questions": [
+    {
+      "question": "What marker is mentioned in the introduction paragraph of Chapter 1 in the Markdown document?",
+      "ground_truth": "The introduction paragraph of Chapter 1 mentions the marker MarkdownIntro.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "Which marker does Section 1.1 of the Markdown document contain?",
+      "ground_truth": "Section 1.1 contains the marker MarkdownSection11.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What unique marker appears in Section 2.1 of the Markdown document?",
+      "ground_truth": "Section 2.1 contains the unique marker MarkdownSection21.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "Why is the Section 2.1 paragraph in the Markdown sample intentionally longer than a single sentence?",
+      "ground_truth": "Because the retrieval system later splits long sections like this one into several overlapping chunks, so the paragraph is kept longer to make sure the section breadcrumb is preserved on every chunk produced from the block.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What marker is found on the first page of the sample PDF?",
+      "ground_truth": "The first page of the sample PDF contains the marker PdfPageOne.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What marker is found on the second page of the sample PDF?",
+      "ground_truth": "The second page of the sample PDF contains the marker PdfPageTwo.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What page number does the sample PDF associate with the marker PdfPageOne?",
+      "ground_truth": "The marker PdfPageOne is on page number 1 of the sample PDF.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What heading title appears on the second page of the sample PDF?",
+      "ground_truth": "The heading title on the second page of the sample PDF is 'Chapter Two'.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What marker does the introduction paragraph of the first chapter in the DOCX document mention?",
+      "ground_truth": "The introduction paragraph of the first chapter mentions the marker DocxIntro.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "Which marker is contained in Section 1.1 of the DOCX document?",
+      "ground_truth": "Section 1.1 of the DOCX document contains the marker DocxSection11.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What unique marker appears in Section 2.1 of the DOCX document?",
+      "ground_truth": "Section 2.1 of the DOCX document contains the unique marker DocxSection21.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "In the DOCX document, what does the paragraph containing the marker DocxSection21 represent?",
+      "ground_truth": "It represents a realistic paragraph in the document outline.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What marker is mentioned in the introduction paragraph of Chapter 1 in the HTML document?",
+      "ground_truth": "The introduction paragraph of Chapter 1 in the HTML document mentions the marker HtmlIntro.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "Which marker does Section 1.1 of the HTML document contain?",
+      "ground_truth": "Section 1.1 of the HTML document contains the marker HtmlSection11.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What unique marker is in Section 2.1 of the HTML document?",
+      "ground_truth": "Section 2.1 of the HTML document contains the unique marker HtmlSection21.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "In the HTML document, what does the paragraph containing the marker HtmlSection21 represent?",
+      "ground_truth": "It represents a realistic paragraph.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What is the capital of France according to the documents?",
+      "ground_truth": "I don't have enough information to answer this question.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What email address does the author provide in these documents?",
+      "ground_truth": "I don't have enough information to answer this question.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What is the price of the product described in the documents?",
+      "ground_truth": "I don't have enough information to answer this question.",
+      "expected_chunk_ids": []
+    },
+    {
+      "question": "What programming language is recommended in the documents?",
+      "ground_truth": "I don't have enough information to answer this question.",
+      "expected_chunk_ids": []
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+# Dependencies for the RAGAS evaluation harness (eval/run_ragas.py).
+#
+# The harness talks to the running stack over HTTP only — it does NOT import any
+# backend code — so this is a self-contained environment, separate from
+# backend/requirements*.txt. Install it into its own venv:
+#
+#   python -m venv eval/.venv
+#   eval/.venv/bin/pip install -r eval/requirements.txt   # Windows: eval\.venv\Scripts\pip
+#
+# RAGAS scores answers with an LLM judge (OpenAI by default), so OPENAI_API_KEY
+# must be set (read from the repo-root .env automatically).
+
+ragas>=0.2.0,<0.3.0
+langchain-openai>=0.2.0,<0.4.0
+datasets>=2.16.0
+pandas>=2.0.0
+httpx>=0.27.0
+python-dotenv>=1.0.0
