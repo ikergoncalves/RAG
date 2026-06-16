@@ -245,9 +245,20 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   SQLite (ASGI transport, Qdrant/filesystem stubbed); each new frontend component
   has a Vitest test (React Testing Library + stubbed `fetch`, including a
   `ReadableStream` SSE double). `npm run test`, `npm run lint` and `npm run build`
-  all pass. Dev (Vite) and Docker (nginx) proxies forward the new `/documents`,
-  `/chunks` and `/chat` paths (SSE buffering disabled in nginx). End-to-end
-  verification via `docker-compose up` is the remaining step before merge.
+  all pass. The browser calls the backend under an `/api` prefix that the Vite
+  dev proxy and the nginx (Docker) config strip before forwarding, so the REST
+  resources never shadow the client-side routes (e.g. the `/documents` SPA route
+  vs the `/documents` resource); nginx disables response buffering on `/api` so
+  the `/chat` stream is delivered incrementally. Verified end-to-end via
+  `docker-compose up --wait` (all services healthy, `alembic current` at `0003`):
+  through the nginx origin on `:5173`, navigating to `/documents` serves the SPA
+  while `/api/documents` returns JSON; uploading `sample.md` polled
+  `pending → processing → indexed` (3 chunks); asking "What does section 2.1
+  discuss?" streamed the answer over 6 `delta` events then returned `[n]`
+  citations whose `quote`s are verbatim substrings of the cited chunk fetched via
+  `GET /api/chunks/{id}`; a follow-up question reused the same `conversation_id`;
+  and deleting the document returned `204`, emptied the list, and cascaded the
+  chunk to `404`.
 - ⬜ Later phases: evaluation (RAGAS), observability/cost, and deploy/CI-CD.
 
 ### API endpoints
