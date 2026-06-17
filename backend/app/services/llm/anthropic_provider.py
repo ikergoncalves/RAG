@@ -113,7 +113,11 @@ class AnthropicLLMProvider(LLMProvider):
         self._client = client or anthropic.AsyncAnthropic(api_key=api_key)
 
     async def generate_answer(
-        self, question: str, context_chunks: list[dict[str, Any]]
+        self,
+        question: str,
+        context_chunks: list[dict[str, Any]],
+        *,
+        usage_sink: dict[str, int] | None = None,
     ) -> AsyncIterator[str]:
         user_message = f"{_format_context(context_chunks)}\n\nQuestion: {question}"
         async with self._client.messages.stream(
@@ -124,6 +128,15 @@ class AnthropicLLMProvider(LLMProvider):
         ) as stream:
             async for text in stream.text_stream:
                 yield text
+            if usage_sink is not None:
+                # The final message carries the authoritative token usage for the
+                # streamed completion; surface it for cost tracking / logging.
+                try:
+                    usage = (await stream.get_final_message()).usage
+                    usage_sink["prompt_tokens"] = usage.input_tokens
+                    usage_sink["completion_tokens"] = usage.output_tokens
+                except Exception as exc:  # pragma: no cover - SDK/network dependent
+                    logger.warning("Failed to read generation token usage: %s", exc)
 
     async def extract_citations(
         self, question: str, answer: str, context_chunks: list[dict[str, Any]]

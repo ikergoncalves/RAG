@@ -31,7 +31,11 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def generate_answer(
-        self, question: str, context_chunks: list[dict[str, Any]]
+        self,
+        question: str,
+        context_chunks: list[dict[str, Any]],
+        *,
+        usage_sink: dict[str, int] | None = None,
     ) -> AsyncIterator[str]:
         """Stream the answer to ``question`` grounded in ``context_chunks``.
 
@@ -40,6 +44,11 @@ class LLMProvider(ABC):
         insert ``[n]`` markers at the points where each source is used. When the
         context does not cover the question, the whole answer is exactly
         :data:`INSUFFICIENT_CONTEXT_MESSAGE` with no citation markers.
+
+        When ``usage_sink`` is provided, the implementation may populate it with
+        ``prompt_tokens`` and ``completion_tokens`` once generation completes, so
+        callers can record token usage and estimate cost. Providers that cannot
+        report usage simply leave it untouched.
         """
         raise NotImplementedError
 

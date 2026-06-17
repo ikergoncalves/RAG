@@ -110,6 +110,8 @@ Once it's up:
 - Frontend: <http://localhost:5173>
 - Backend health: <http://localhost:8000/health>
 - API docs (Swagger): <http://localhost:8000/docs>
+- Prometheus metrics: <http://localhost:8000/metrics>
+- Langfuse (LLM tracing): <http://localhost:3000>
 
 `GET /health` returns `200` with `{"status": "ok", ...}` when the app and all
 three backing services (PostgreSQL, Qdrant, Redis) are reachable; it returns
@@ -277,7 +279,37 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   parsing/scoring/reporting helpers; the full RAGAS run requires a live stack
   plus `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, so it has not been executed in this
   environment yet._
-- ⬜ Later phases: observability/cost, and deploy/CI-CD.
+- ✅ **Phase 7 — Observability, cache & cost**: structured logging (`structlog`,
+  JSON in production / colored console in dev) with one log line per chat request
+  carrying the query, retrieved and re-ranked `chunk_id`s, per-stage latency
+  (`retrieval_ms`/`rerank_ms`/`generation_ms`/`total_ms`), prompt/completion
+  tokens (read from the Anthropic stream's `usage`), estimated USD cost and the
+  two cache-hit flags. **Langfuse** tracing instruments `ChatService.ask` with a
+  trace per request and `retrieval`/`rerank`/`generation` spans (chunk ids,
+  scores, latencies, tokens); it is a silent no-op when the keys are unset. A
+  **Redis cache** (`app/services/cache.py`) caches query embeddings (SHA-256 of
+  the normalized query → skips the embedding API on a hit) and full responses
+  (`{answer, citations}` with a configurable TTL → a repeated question is
+  replayed as a real-looking stream without touching retrieval or the LLM).
+  **Prometheus** metrics at `GET /metrics` cover requests (by endpoint + status),
+  per-stage latency histograms, cache hit/miss counters and an accumulated
+  estimated-cost gauge; a configurable price table in `Settings` drives the cost
+  estimate. The compose stack now includes Langfuse (UI at
+  <http://localhost:3000>) with its own Postgres. See [Observability](#observability).
+  Covered by `test_cache.py` and `test_metrics.py` (plus the existing chat
+  tests). Verified end-to-end via `docker-compose up --build --wait`: all seven
+  services came up healthy (including `langfuse` and `langfuse-db`); `GET /metrics`
+  returned the Prometheus exposition with `rag_requests_total`,
+  `rag_stage_latency_seconds_bucket`, `rag_cache_events_total` and
+  `rag_estimated_cost_usd_total`. Uploading `sample.md` reached `status=indexed`
+  (3 chunks); asking "What does section 2.1 discuss?" logged a `chat.request`
+  event with the full field set (`prompt_tokens=342`, `completion_tokens=108`,
+  `estimated_cost_usd≈0.0026`, per-stage latencies and chunk ids), and **re-asking
+  the same question logged `cache_hit_response=true`** with zero token cost while
+  streaming the cached answer. `/metrics` then showed the counters incremented
+  accordingly (`rag_cache_events_total{cache="response",result="hit"} 1`,
+  `rag_estimated_cost_usd_total` reflecting the single billed request).
+- ⬜ Later phase: deploy/CI-CD.
 
 ### API endpoints
 
@@ -293,6 +325,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
 | `GET /chunks/{id}`               | Fetch a single chunk by id (source viewer)             |
 | `POST /retrieve`                 | Hybrid search + re-ranking (internal/debug); scored chunks |
 | `POST /chat`                     | Cited answer generation over SSE (`delta` stream + `citations`) |
+| `GET /metrics`                   | Prometheus metrics (requests, stage latency, cache, cost) |
 
 ### Re-ranking
 
@@ -384,3 +417,80 @@ spends OpenAI/Anthropic credits). Trigger it from the Actions tab; it boots the
 docker-compose stack, indexes the fixtures, runs `eval/run_ragas.py`, and
 publishes `eval/results/report.md` (and `report.json`) as a workflow artifact.
 It needs the repository secrets `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`.
+
+## Observability
+
+Every chat request is observable on four fronts — structured logs, Langfuse
+traces, Prometheus metrics, and a Redis cache that cuts cost and latency.
+
+### Structured logging (structlog)
+
+`app/core/logging.py` configures [structlog](https://www.structlog.org) and is
+initialized from the FastAPI lifespan. Output format follows `ENVIRONMENT`:
+single-line **JSON** in production (`ENVIRONMENT=production`), colored
+human-readable console logs otherwise. `ChatService.ask` emits exactly one
+`chat.request` log line per request with:
+
+- `query`, `retrieved_chunk_ids` (post-fusion) and `reranked_chunk_ids`
+  (post-rerank),
+- per-stage latency: `retrieval_ms`, `rerank_ms`, `generation_ms`, `total_ms`,
+- `prompt_tokens` / `completion_tokens` read from the Anthropic stream's `usage`,
+- `estimated_cost_usd`, and the `cache_hit_embedding` / `cache_hit_response` flags.
+
+### Tracing (Langfuse)
+
+`app/services/observability.py` wraps Langfuse. `ChatService.ask` opens a trace
+per request with nested **`retrieval`**, **`rerank`** and **`generation`** spans,
+attaching chunk ids, scores, latencies and token usage as span metadata. When
+`LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` are unset — or the SDK/host is
+unavailable — the instrumentation degrades to a **silent no-op**, so the system
+runs identically with or without it.
+
+The compose stack runs a self-hosted Langfuse (v2) with its own Postgres and
+bootstraps a project + API keys headlessly, so tracing works out of the box.
+
+- **Langfuse UI:** <http://localhost:3000> (default login `admin@example.com` /
+  `changeme123` — override via the `LANGFUSE_*` variables in `.env`).
+- To **disable** tracing, clear `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY`.
+
+### Metrics (Prometheus / Grafana)
+
+`app/core/metrics.py` defines Prometheus metrics, exposed at **`GET /metrics`**
+in the standard exposition format (scrape it from Prometheus and graph it in
+Grafana):
+
+| Metric | Type | Labels |
+| --- | --- | --- |
+| `rag_requests_total` | counter | `endpoint`, `status_code` |
+| `rag_stage_latency_seconds` | histogram | `stage` = `retrieval`/`rerank`/`generation`/`total` |
+| `rag_cache_events_total` | counter | `cache` = `embedding`/`response`, `result` = `hit`/`miss` |
+| `rag_estimated_cost_usd_total` | gauge | — |
+
+```bash
+curl http://localhost:8000/metrics      # or http://localhost:5173/api/metrics via the proxy
+```
+
+### Cost estimation
+
+A price table in `Settings` (`llm_cost_prompt_per_1k_tokens`,
+`llm_cost_completion_per_1k_tokens`, `embedding_cost_per_1k_tokens`, defaulting
+to `claude-sonnet-4-6` and `text-embedding-3-small` pricing) turns the per-request
+token usage into a USD estimate that is logged, traced, and accumulated into the
+`rag_estimated_cost_usd_total` gauge.
+
+### Cache (Redis)
+
+`app/services/cache.py` adds two best-effort Redis caches, both keyed by a
+SHA-256 hash of the normalized query (lower-cased, whitespace-collapsed):
+
+- **Query embeddings** — looked up by `RetrievalService` before calling the
+  embedding provider; a hit reuses the cached dense vector and skips the paid
+  embedding API call (TTL `cache_embedding_ttl_seconds`, default 1 day).
+- **Responses** — the full `{answer, citations}` payload, looked up by
+  `ChatService` before retrieval; an identical question is **replayed as a real
+  stream** (delta + citations events) without touching retrieval or the LLM (TTL
+  `cache_response_ttl_seconds`, default 1 hour).
+
+Both `cache_hit_embedding` and `cache_hit_response` surface in the structured log
+and the `rag_cache_events_total` metric. Redis errors are logged and treated as a
+miss, so the cache can never take the request path down.

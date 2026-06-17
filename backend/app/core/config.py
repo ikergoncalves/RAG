@@ -85,6 +85,31 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
 
+    # --- Cache (Redis) ---------------------------------------------------
+    # TTL for cached query embeddings (dense vectors keyed by the normalized
+    # query hash). Embeddings are deterministic for a given model, so a long
+    # TTL is safe; reindexing documents does not change a query's embedding.
+    cache_embedding_ttl_seconds: int = 86_400
+    # TTL for cached full responses ({answer, citations}) keyed by the same
+    # query hash. Kept short so newly ingested documents are reflected quickly.
+    cache_response_ttl_seconds: int = 3_600
+
+    # --- Cost estimation (USD per 1k tokens) -----------------------------
+    # Defaults match the configured providers: ``claude-sonnet-4-6`` for
+    # generation ($3 / $15 per 1M input/output tokens) and OpenAI
+    # ``text-embedding-3-small`` ($0.02 per 1M tokens). Override these if the
+    # generation/embedding models change so cost tracking stays accurate.
+    llm_cost_prompt_per_1k_tokens: float = 0.003
+    llm_cost_completion_per_1k_tokens: float = 0.015
+    embedding_cost_per_1k_tokens: float = 0.00002
+
+    # --- Observability (Langfuse) ----------------------------------------
+    # LLM tracing. When the keys are unset the instrumentation is a silent
+    # no-op, so the system runs identically with or without Langfuse.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str = "http://localhost:3000"
+
     # --- Ingestion / chunking --------------------------------------------
     # Directory where uploaded source files are stored.
     upload_dir: str = "var/uploads"

@@ -51,12 +51,21 @@ class FakeLLMProvider(LLMProvider):
         self.generate_calls = 0
         self.extract_calls = 0
 
-    async def generate_answer(self, question: str, context_chunks: list[dict[str, Any]]):
+    async def generate_answer(
+        self,
+        question: str,
+        context_chunks: list[dict[str, Any]],
+        *,
+        usage_sink: dict[str, int] | None = None,
+    ):
         self.generate_calls += 1
         # Emit in a few slices so the delta-accumulation path is exercised.
         chunk_size = max(1, len(self._answer) // 3)
         for start in range(0, len(self._answer), chunk_size):
             yield self._answer[start : start + chunk_size]
+        if usage_sink is not None:
+            usage_sink["prompt_tokens"] = 100
+            usage_sink["completion_tokens"] = 20
 
     async def extract_citations(
         self, question: str, answer: str, context_chunks: list[dict[str, Any]]

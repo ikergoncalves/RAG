@@ -47,6 +47,50 @@ services:
       timeout: 5s
       retries: 10
 
+  # Dedicated Postgres for Langfuse, isolated from the application database.
+  langfuse-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Langfuse (LLM tracing). Pinned to the single-container v2 image. The
+  # LANGFUSE_INIT_* variables bootstrap a project + API keys headlessly so the
+  # backend can trace out of the box; the same keys are passed to the backend
+  # below. Open the UI at http://localhost:3000 (login with the init user).
+  langfuse:
+    image: langfuse/langfuse:2
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    ports:
+      - "${LANGFUSE_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3000}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-rag-langfuse-nextauth-secret}
+      SALT: ${LANGFUSE_SALT:-rag-langfuse-salt}
+      # Must be a 256-bit key as 64 hex characters (override in production).
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_INIT_ORG_ID: rag
+      LANGFUSE_INIT_ORG_NAME: RAG
+      LANGFUSE_INIT_PROJECT_ID: rag
+      LANGFUSE_INIT_PROJECT_NAME: RAG
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-rag-local}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-rag-local}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_USER_EMAIL:-admin@example.com}
+      LANGFUSE_INIT_USER_NAME: Admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_USER_PASSWORD:-changeme123}
+
   backend:
     build:
       context: ../backend
@@ -67,6 +111,11 @@ services:
       UPLOAD_DIR: /app/var/uploads
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Langfuse tracing (defaults match the langfuse service's init keys; clear
+      # them to disable tracing — the instrumentation becomes a silent no-op).
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-rag-local}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-rag-local}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse:3000}
     volumes:
       - backend_uploads:/app/var/uploads
     ports:
@@ -77,6 +126,8 @@ services:
       redis:
         condition: service_healthy
       qdrant:
+        condition: service_started
+      langfuse:
         condition: service_started
     healthcheck:
       test:
@@ -104,3 +155,4 @@ volumes:
   qdrant_data:
   redis_data:
   backend_uploads:
+  langfuse_db_data:

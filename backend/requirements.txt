@@ -24,6 +24,13 @@ fastembed>=0.3,<1.0
 # LLM generation (Claude) — streaming answers + tool-use citation extraction
 anthropic>=0.40,<1.0
 
+# Observability: structured logging, Prometheus metrics, Langfuse tracing.
+# Langfuse is pinned to the v2 SDK to match the self-hosted langfuse:2 image
+# used in docker-compose (the v3 SDK has a different tracing API).
+structlog>=24.1,<26.0
+prometheus-client>=0.20,<1.0
+langfuse>=2.0,<3.0
+
 # Retrieval re-ranking (cross-encoder).
 # Torch is resolved from PyTorch's CPU-only wheel index so we don't pull the
 # multi-GB CUDA build, which is useless on this CPU-only Docker image. The
