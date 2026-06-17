@@ -19,7 +19,7 @@ VENV_PY_UNIX := eval/.venv/bin/python
 VENV_PY_WIN  := eval/.venv/Scripts/python.exe
 PYTHON ?= $(or $(wildcard $(VENV_PY_UNIX)),$(wildcard $(VENV_PY_WIN)),python)
 
-.PHONY: eval eval-install eval-seed stack-up stack-down
+.PHONY: eval eval-install eval-seed seed-demo stack-up stack-down
 
 ## Create eval/.venv and install the evaluation dependencies.
 eval-install:
@@ -30,6 +30,11 @@ eval-install:
 ## Upload + index the test fixtures into the running stack (idempotent).
 eval-seed:
 	RAG_API_BASE_URL=$(BASE_URL) $(PYTHON) eval/index_fixtures.py
+
+## Upload + index the demo documents in seed-data/ (idempotent). Use this to
+## populate a fresh deployment (e.g. the public demo) with browsable content.
+seed-demo:
+	RAG_API_BASE_URL=$(BASE_URL) $(PYTHON) eval/seed_demo.py
 
 ## Run the RAGAS evaluation. Verifies the stack is reachable, seeds the
 ## fixtures, then scores the dataset and writes eval/results/report.{json,md}.
