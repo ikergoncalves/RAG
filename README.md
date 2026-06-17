@@ -279,7 +279,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   parsing/scoring/reporting helpers; the full RAGAS run requires a live stack
   plus `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, so it has not been executed in this
   environment yet._
-- 🧪 **Phase 7 — Observability, cache & cost**: structured logging (`structlog`,
+- ✅ **Phase 7 — Observability, cache & cost**: structured logging (`structlog`,
   JSON in production / colored console in dev) with one log line per chat request
   carrying the query, retrieved and re-ranked `chunk_id`s, per-stage latency
   (`retrieval_ms`/`rerank_ms`/`generation_ms`/`total_ms`), prompt/completion
@@ -296,9 +296,19 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   estimated-cost gauge; a configurable price table in `Settings` drives the cost
   estimate. The compose stack now includes Langfuse (UI at
   <http://localhost:3000>) with its own Postgres. See [Observability](#observability).
-  _Covered by `test_cache.py` and `test_metrics.py` (plus the existing chat
-  tests); the live Langfuse/Prometheus stack wiring is in place but has not been
-  booted end-to-end in this environment yet._
+  Covered by `test_cache.py` and `test_metrics.py` (plus the existing chat
+  tests). Verified end-to-end via `docker-compose up --build --wait`: all seven
+  services came up healthy (including `langfuse` and `langfuse-db`); `GET /metrics`
+  returned the Prometheus exposition with `rag_requests_total`,
+  `rag_stage_latency_seconds_bucket`, `rag_cache_events_total` and
+  `rag_estimated_cost_usd_total`. Uploading `sample.md` reached `status=indexed`
+  (3 chunks); asking "What does section 2.1 discuss?" logged a `chat.request`
+  event with the full field set (`prompt_tokens=342`, `completion_tokens=108`,
+  `estimated_cost_usd≈0.0026`, per-stage latencies and chunk ids), and **re-asking
+  the same question logged `cache_hit_response=true`** with zero token cost while
+  streaming the cached answer. `/metrics` then showed the counters incremented
+  accordingly (`rag_cache_events_total{cache="response",result="hit"} 1`,
+  `rag_estimated_cost_usd_total` reflecting the single billed request).
 - ⬜ Later phase: deploy/CI-CD.
 
 ### API endpoints
