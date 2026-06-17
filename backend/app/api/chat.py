@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
 from app.schemas.chat import ChatRequest
+from app.services.cache import get_default_cache
 from app.services.chat import ChatService
 
 router = APIRouter(tags=["chat"])
@@ -42,7 +43,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
                 detail="conversation_id must be a valid UUID",
             ) from exc
 
-    service = ChatService()
+    service = ChatService(cache_service=get_default_cache())
 
     async def event_stream() -> AsyncIterator[str]:
         async for item in service.ask(request.question, conversation_id):
