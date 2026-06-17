@@ -40,7 +40,8 @@ Evaluated with RAGAS. Portfolio project #2, companion to "Nexus" (Node/React Saa
 ## Roadmap
 The phase-by-phase plan and ready-to-use prompts live in `ROADMAP.md`.
 
-- **Current phase: 8** — update this line as each phase is completed and merged.
+- **Current phase: complete** — all roadmap phases (0–8) implemented; see the
+  README "Status" section for the per-phase summary.
 - Before starting a phase, read its full section in `ROADMAP.md`.
 - Do not start a phase whose dependencies (earlier phases) aren't marked
   done in the README status section.

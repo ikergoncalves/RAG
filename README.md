@@ -8,6 +8,35 @@ exact quotes and a clickable source location (document, page, section).
 
 > Portfolio project #2 — companion to "Nexus" (Node/React SaaS).
 
+## Demo
+
+> **Live demo:** _coming soon_ — <https://TODO-demo-url.example> (placeholder).
+
+Run the whole system locally with a single command — no `.env` required, since
+sensible defaults are baked into the compose file:
+
+```bash
+docker-compose -f infra/docker-compose.yml up --build
+```
+
+Then open the frontend at <http://localhost:5173>, upload a document on the
+**Documents** page, and ask a question on **Chat**: every answer comes back with
+clickable `[n]` citations backed by verbatim quotes you can open in the source
+viewer.
+
+Want ready-made content? With the stack running, seed the bundled example
+documents (networking, web, programming and computing-history texts) so you can
+start asking questions immediately:
+
+```bash
+make eval-install      # one-off: create eval/.venv with httpx
+make seed-demo         # upload + index everything in seed-data/ (idempotent)
+```
+
+See [How to run locally](#how-to-run-locally) for the full setup and
+[Production deployment](#production-deployment) for the production stack and
+CI/CD.
+
 ## Overview
 
 - **Backend** — Python 3.11 + FastAPI, SQLAlchemy + Alembic, Pydantic Settings.
@@ -67,23 +96,64 @@ flowchart LR
 The data flow is: **ingestion pipeline → vector store → retrieval → generation →
 frontend**.
 
+## Architecture decisions
+
+A few deliberate choices shape this system. Each gives up a simpler alternative
+for a capability the project specifically set out to demonstrate.
+
+- **Qdrant (over pgvector).** Qdrant offers first-class _hybrid_ search — dense
+  and sparse (BM25) vectors fused server-side with Reciprocal Rank Fusion — plus
+  first-class payload filtering. Doing the same on pgvector would mean bolting
+  BM25 and fusion on by hand. Hybrid retrieval is central here, so the database
+  that does it natively won.
+- **Hybrid search + cross-encoder re-ranking (over vector search alone).** Pure
+  semantic search reliably misses exact tokens — error codes, field names,
+  identifiers (e.g. "404", "Time to Live"). BM25 recovers those, RRF merges the
+  two rankings, and a cross-encoder then re-scores the merged candidates jointly
+  for a precise top-k. (See [Re-ranking](#re-ranking).)
+- **Structured citations with verbatim quotes (over bare `[n]` markers).** Every
+  citation carries the exact quote and its `chunk_id`, so a marker can be
+  _validated programmatically_ (the `citation_accuracy` metric checks each quote
+  is a real substring of its chunk) and _highlighted_ in the source viewer. A
+  bare `[n]` can be neither verified nor located.
+- **Two-call generation — streaming answer + tool-use extraction (over a single
+  structured call).** The answer is streamed as plain text for a real
+  token-by-token UX, then a separate forced tool-use call extracts the citation
+  objects. This avoids parsing half-finished JSON out of a stream while still
+  returning a strict citation schema. (See Phase 4 in [Status](#status).)
+- **RAGAS + a custom `citation_accuracy` metric (over generation metrics
+  alone).** RAGAS scores faithfulness, relevancy and context precision/recall,
+  but the project's headline guarantee — that every `[n]` is backed by a real
+  quote — is checked directly by string matching rather than trusted to an LLM
+  judge. (See [Evaluation](#evaluation).)
+- **Langfuse _and_ Prometheus (over logging alone).** Two complementary levels
+  of observability: Langfuse gives a per-request trace (retrieval → rerank →
+  generation spans with chunk ids, scores and tokens) for debugging a single
+  answer, while Prometheus gives aggregate metrics (latency histograms, cache
+  hit rate, accumulated cost) for service-level health. (See
+  [Observability](#observability).)
+
 ## Repository layout
 
 ```
 rag/
-├── backend/            # FastAPI app (api, core, services, models, db, schemas)
+├── backend/                 # FastAPI app (api, core, services, models, db, schemas)
 │   ├── app/
 │   ├── tests/
 │   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/           # Vite + React + TypeScript
+│   └── Dockerfile           # multi-stage, non-root runtime
+├── frontend/                # Vite + React + TypeScript
 │   ├── src/
-│   ├── nginx.conf      # serves the SPA and proxies /health + /api to backend
-│   └── Dockerfile
+│   ├── nginx.conf           # serves the SPA and proxies /health + /api to backend
+│   └── Dockerfile           # build + non-root nginx (nginx-unprivileged)
 ├── infra/
-│   └── docker-compose.yml
-├── .env.example        # root env for docker-compose
-└── .github/workflows/  # CI: lint + tests (backend & frontend)
+│   ├── docker-compose.yml       # full local stack (development)
+│   └── docker-compose.prod.yml  # production variant (GHCR images, healthchecks)
+├── eval/                    # RAGAS harness + seed_demo.py (HTTP-only)
+├── seed-data/               # public-domain demo documents (PDF + Markdown)
+├── .env.example             # root env for the development compose
+├── .env.prod.example        # root env template for the production compose
+└── .github/workflows/       # cicd.yml (lint+test, GHCR build/push) · eval.yml (RAGAS)
 ```
 
 ## How to run locally
@@ -137,6 +207,45 @@ cd frontend
 npm install
 npm run dev      # http://localhost:5173, proxies /health + /api to :8000
 ```
+
+## Production deployment
+
+The production stack lives in
+[`infra/docker-compose.prod.yml`](infra/docker-compose.prod.yml). Compared with
+the development compose it:
+
+- pulls pre-built images from the GitHub Container Registry
+  (`ghcr.io/ikergoncalves/rag-backend` and `…/rag-frontend`, published by the
+  CI/CD pipeline) instead of building from source — with a `build` block kept as
+  a fallback;
+- drops the development bind mounts, keeping only named volumes for real data;
+- sets `restart: unless-stopped` and an explicit healthcheck on every service;
+- reads all credentials from the environment with **no inline defaults** — a
+  missing secret fails the stack fast; and
+- publishes only the frontend (`:80`) and, for debugging, the backend (`:8000`)
+  to the host — the datastores and Langfuse stay on the internal network.
+
+```bash
+cp .env.prod.example .env.prod                  # then fill in real secrets
+docker compose --env-file .env.prod -f infra/docker-compose.prod.yml up -d
+make seed-demo                                  # optional: load demo content
+```
+
+Both images are built multi-stage for small, non-root runtimes: the backend
+copies only a pre-built virtualenv (with the CPU-only PyTorch wheel) into a slim
+base and runs as an unprivileged user; the frontend serves the static build
+through the non-root `nginx-unprivileged` image (listening on `:8080`).
+
+### CI/CD
+
+[`.github/workflows/cicd.yml`](.github/workflows/cicd.yml) runs **lint + tests**
+(backend `ruff`/`black`/`pytest`, frontend `eslint`/`prettier`/`vitest`/`build`,
+with pip and npm caches) on every push and pull request, and **builds + pushes**
+the backend and frontend images to GHCR on merges to `main`, using the GitHub
+Actions Docker layer cache (`cache-from`/`cache-to type=gha`) for fast
+incremental builds. The cost-incurring RAGAS evaluation stays in its own manual
+workflow, [`.github/workflows/eval.yml`](.github/workflows/eval.yml) (see
+[Evaluation](#evaluation)).
 
 ## Development commands
 
@@ -309,7 +418,31 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   streaming the cached answer. `/metrics` then showed the counters incremented
   accordingly (`rag_cache_events_total{cache="response",result="hit"} 1`,
   `rag_estimated_cost_usd_total` reflecting the single billed request).
-- ⬜ Later phase: deploy/CI-CD.
+- ✅ **Phase 8 — Deploy & CI/CD**: production-grade container images and a
+  full CI/CD pipeline. `backend/Dockerfile` is now multi-stage — a builder
+  installs dependencies into an isolated virtualenv (torch from the CPU-only
+  wheel index) and a slim runtime stage copies just that venv plus the app,
+  running as a non-root user; `frontend/Dockerfile` serves the static build
+  through the non-root `nginx-unprivileged` image (listening on `:8080`) and
+  installs with `npm ci`. [`infra/docker-compose.prod.yml`](infra/docker-compose.prod.yml)
+  is a production variant: GHCR images (with a build fallback), no dev bind
+  mounts, `restart: unless-stopped` and explicit healthchecks on every service,
+  all credentials from the environment with no inline defaults
+  (`${VAR:?...}`), and only the frontend (`:80`) + backend (`:8000`, debug)
+  published. [`.github/workflows/cicd.yml`](.github/workflows/cicd.yml) runs
+  cached lint + tests on every push/PR and builds + pushes both images to GHCR
+  (with the `type=gha` layer cache) on merges to `main`; the RAGAS eval stays
+  in its own manual workflow. [`seed-data/`](seed-data/) holds four public-domain
+  demo documents (three Markdown files with heading hierarchy + a five-page PDF)
+  and [`eval/seed_demo.py`](eval/seed_demo.py) (`make seed-demo`) uploads and
+  indexes them idempotently so a fresh deployment has browsable content. See
+  [Architecture decisions](#architecture-decisions) and
+  [Production deployment](#production-deployment). _Verified: both compose files
+  pass `docker compose config`; the frontend image base/non-root user and the
+  service healthcheck tooling were confirmed against the real images; the
+  frontend lint/test/build and backend test suite pass. The GHCR push and a
+  full `docker-compose.prod.yml up` need a registry and real API keys, so they
+  run in CI / on the demo host rather than in this environment._
 
 ### API endpoints
 
