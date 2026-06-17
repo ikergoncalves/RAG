@@ -101,7 +101,7 @@ services:
       LANGFUSE_INIT_USER_NAME: Admin
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_USER_PASSWORD:?LANGFUSE_USER_PASSWORD is required}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/public/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/public/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -172,8 +172,11 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # 127.0.0.1, not localhost: nginx listens on IPv4 only (the unprivileged
+    # image cannot add the IPv6 listen to our read-only config), and busybox
+    # wget resolves localhost to ::1 without falling back to IPv4.
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 15s
       timeout: 5s
       retries: 5
