@@ -61,14 +61,17 @@ class Settings(BaseSettings):
     sparse_embedding_model: str = "Qdrant/bm25"
 
     # --- Retrieval / re-ranking ------------------------------------------
-    # Cross-encoder used to re-rank hybrid-search candidates. The default is a
-    # small, CPU-friendly model (~80 MB) that reranks in milliseconds on the
-    # CPU-only Docker image; swap it via this setting for a heavier model such
-    # as BAAI/bge-reranker-v2-m3 when a GPU / more throughput is available.
-    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Re-ranking is delegated to Cohere's hosted Rerank API rather than a local
+    # cross-encoder, so the backend image ships no torch / sentence-transformers
+    # and stays small enough for memory-constrained hosts (e.g. free deploy
+    # tiers). When ``cohere_api_key`` is unset, re-ranking degrades gracefully to
+    # a no-op that returns the fused candidates in their original order (see
+    # ``app/services/retrieval/cohere_reranker.py``).
+    cohere_api_key: str | None = None
+    cohere_rerank_model: str = "rerank-v3.5"
     # Candidates pulled by each prefetch branch (dense, sparse) before RRF fusion.
     retrieval_prefetch_limit: int = 20
-    # Number of fused candidates handed to the cross-encoder for re-ranking.
+    # Number of fused candidates handed to the reranker for re-ranking.
     retrieval_candidates: int = 20
     # Default number of chunks returned after re-ranking.
     retrieval_top_k: int = 5

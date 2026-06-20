@@ -1,4 +1,4 @@
-"""Hybrid retrieval: dense + BM25 fusion in Qdrant, then cross-encoder re-ranking.
+"""Hybrid retrieval: dense + BM25 fusion in Qdrant, then Cohere re-ranking.
 
 ``RetrievalService.retrieve`` runs the two-stage retrieval pipeline:
 
@@ -7,7 +7,8 @@
 2. Run a hybrid Qdrant search — a dense and a sparse prefetch fused with RRF —
    returning ~``retrieval_candidates`` candidates, optionally filtered by
    ``document_id``.
-3. Re-rank those candidates with a cross-encoder and return the top ``top_k``.
+3. Re-rank those candidates with the Cohere Rerank API and return the top
+   ``top_k``.
 
 Each result carries the metadata needed for cited generation and the source
 viewer: ``chunk_id``, ``document_id``, ``document_filename``, ``page_number``,
@@ -30,7 +31,7 @@ from app.core.config import settings
 from app.services import vector_store
 from app.services.cache import CacheService, get_default_cache
 from app.services.embeddings import EmbeddingProvider, get_default_embedding_provider
-from app.services.retrieval.cross_encoder import CrossEncoderReranker, get_default_reranker
+from app.services.retrieval.cohere_reranker import CohereReranker, get_default_reranker
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class RetrievalOutcome:
     """Result of a retrieval run with the metrics needed for observability.
 
     ``candidates`` are the fused hybrid-search hits *before* re-ranking, and
-    ``reranked`` are the final ``top_k`` after the cross-encoder. The two stage
+    ``reranked`` are the final ``top_k`` after the Cohere reranker. The two stage
     latencies and the embedding cache-hit flag let the caller log, trace and
     cost each request without re-deriving them.
     """
@@ -53,14 +54,14 @@ class RetrievalOutcome:
 
 
 class RetrievalService:
-    """Hybrid (dense + BM25) retrieval with cross-encoder re-ranking."""
+    """Hybrid (dense + BM25) retrieval with Cohere re-ranking."""
 
     def __init__(
         self,
         *,
         embedding_provider: EmbeddingProvider | None = None,
         sparse_embedder: vector_store.SparseEmbedder | None = None,
-        reranker: CrossEncoderReranker | None = None,
+        reranker: CohereReranker | None = None,
         collection_name: str | None = None,
         client: AsyncQdrantClient | None = None,
         cache_service: CacheService | None = None,
