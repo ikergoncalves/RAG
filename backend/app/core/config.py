@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # --- Qdrant ----------------------------------------------------------
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
+    # API key for authenticated Qdrant deployments (e.g. Qdrant Cloud). The
+    # local Qdrant in docker-compose requires no auth, so this stays unset
+    # (``None``) there; the client passes no key when it is empty.
+    qdrant_api_key: str | None = None
     # Collection holding chunk vectors (dense + sparse/BM25 for hybrid search).
     qdrant_collection: str = "chunks"
 

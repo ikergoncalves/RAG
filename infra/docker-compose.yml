@@ -106,6 +106,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-rag}
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
+      # Local Qdrant requires no auth; set only when pointing at a secured one.
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       UPLOAD_DIR: /app/var/uploads
