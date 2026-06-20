@@ -47,7 +47,7 @@ CI/CD.
   `EmbeddingProvider`.
 - **LLM** — Claude (Anthropic API), behind a swappable `LLMProvider`, structured
   JSON output with citations.
-- **Re-ranking** — cross-encoder (`bge-reranker-v2-m3`).
+- **Re-ranking** — Cohere Rerank API (`rerank-v3.5`).
 - **Frontend** — React + Vite + TypeScript.
 - **Eval / Observability** — RAGAS, Langfuse, Prometheus/Grafana, structlog.
 
@@ -71,7 +71,7 @@ flowchart LR
 
     subgraph Retrieval["Retrieval"]
         Q[User question] --> H[Hybrid search<br/>RRF fusion]
-        H --> RR[Cross-encoder<br/>re-ranking]
+        H --> RR[Cohere Rerank API<br/>re-ranking]
     end
 
     VS --> H
@@ -106,10 +106,10 @@ for a capability the project specifically set out to demonstrate.
   first-class payload filtering. Doing the same on pgvector would mean bolting
   BM25 and fusion on by hand. Hybrid retrieval is central here, so the database
   that does it natively won.
-- **Hybrid search + cross-encoder re-ranking (over vector search alone).** Pure
+- **Hybrid search + re-ranking (over vector search alone).** Pure
   semantic search reliably misses exact tokens — error codes, field names,
   identifiers (e.g. "404", "Time to Live"). BM25 recovers those, RRF merges the
-  two rankings, and a cross-encoder then re-scores the merged candidates jointly
+  two rankings, and a reranker then re-scores the merged candidates jointly
   for a precise top-k. (See [Re-ranking](#re-ranking).)
 - **Structured citations with verbatim quotes (over bare `[n]` markers).** Every
   citation carries the exact quote and its `chunk_id`, so a marker can be
@@ -420,8 +420,8 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   `rag_estimated_cost_usd_total` reflecting the single billed request).
 - ✅ **Phase 8 — Deploy & CI/CD**: production-grade container images and a
   full CI/CD pipeline. `backend/Dockerfile` is now multi-stage — a builder
-  installs dependencies into an isolated virtualenv (torch from the CPU-only
-  wheel index) and a slim runtime stage copies just that venv plus the app,
+  installs dependencies into an isolated virtualenv and a slim runtime stage
+  copies just that venv plus the app,
   running as a non-root user; `frontend/Dockerfile` serves the static build
   through the non-root `nginx-unprivileged` image (listening on `:8080`) and
   installs with `npm ci`. [`infra/docker-compose.prod.yml`](infra/docker-compose.prod.yml)
@@ -463,22 +463,29 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
 ### Re-ranking
 
 Retrieval is two-stage: a fast hybrid first stage (dense + BM25, fused with RRF
-in Qdrant) over-fetches ~20 candidates, then a **cross-encoder** re-scores each
+in Qdrant) over-fetches ~20 candidates, then a **reranker** re-scores each
 `(query, chunk)` pair jointly and the top-`k` are returned.
 
-The default cross-encoder is **`cross-encoder/ms-marco-MiniLM-L-6-v2`** (set via
-`RERANKER_MODEL`). It was chosen deliberately for this CPU-only Docker setup: at
-~80 MB it builds and downloads quickly and re-ranks ~20 candidates in
-milliseconds on CPU. Heavier rerankers such as `BAAI/bge-reranker-v2-m3` are
-more accurate but several times larger and noticeably slower to load and run
-without a GPU — overkill for a local/demo deployment. Swapping is trivial:
-`RERANKER_MODEL` accepts any `sentence-transformers` cross-encoder, so a
-GPU-backed deployment can opt into a stronger model with no code change.
+Re-ranking is delegated to the **[Cohere Rerank API](https://docs.cohere.com/docs/rerank)**
+(`rerank-v3.5`, set via `COHERE_RERANK_MODEL`) instead of running a local
+cross-encoder. The earlier design loaded a `sentence-transformers` cross-encoder,
+which pulls in **`torch`** — a multi-hundred-MB dependency whose model load alone
+can exhaust a small container. On hosts with little RAM (e.g. the **free tiers**
+of several deploy platforms, ~512 MB–1 GB) that was enough to OOM the backend on
+startup. Moving the re-ranking to a hosted API removes `torch` and
+`sentence-transformers` from the image entirely, so the build is much faster, the
+image much smaller, and the runtime footprint fits comfortably in those limits —
+while the model itself (a current, strong reranker) is generally more accurate
+than the small CPU cross-encoder it replaces.
 
-> Torch is installed from PyTorch's **CPU-only wheel index**
-> (`--extra-index-url https://download.pytorch.org/whl/cpu` in
-> `requirements.txt`) to avoid pulling multi-GB CUDA builds that this image
-> would never use.
+The trade-off is an external API dependency and the network hop it adds per
+query (in exchange for no local model weights and a tiny memory footprint).
+Cohere's free tier allows **1,000 rerank calls/month**, which is ample for a
+portfolio/demo deployment. The reranker is also **fail-safe**: if `COHERE_API_KEY`
+is unset, or a call hits a rate limit / timeout / network error, re-ranking
+degrades to a no-op — the fused RRF candidates are returned in their original
+order (each still annotated with a `rerank_score`) and a warning is logged, so a
+reranker outage never takes the application down.
 
 ## Evaluation
 

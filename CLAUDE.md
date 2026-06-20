@@ -13,7 +13,7 @@ Evaluated with RAGAS. Portfolio project #2, companion to "Nexus" (Node/React Saa
 - Embeddings: OpenAI `text-embedding-3-small`, behind `EmbeddingProvider`
 - LLM: Claude via Anthropic API, behind `LLMProvider`, structured JSON output
   (`{"answer": "...[n]...", "citations": [{number, document_id, page, section, quote, chunk_id}]}`)
-- Re-ranking: cross-encoder (`bge-reranker-v2-m3`)
+- Re-ranking: Cohere Rerank API (`rerank-v3.5`), behind a swappable reranker
 - Frontend: React + Vite + TypeScript
 - Eval: RAGAS | Observability: Langfuse + Prometheus/Grafana + structlog
 
