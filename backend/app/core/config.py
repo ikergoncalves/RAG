@@ -5,9 +5,19 @@ All settings are centralized here so the rest of the codebase never reads
 now but only consumed in later phases.
 """
 
+# Temporary startup diagnostics: markers around the imports and around the
+# Settings() instantiation, to isolate a startup hang (is it importing
+# pydantic_settings, or reading/validating an env var?). The top marker precedes
+# all imports, so E402 is silenced file-wide for now. Remove once resolved.
+# ruff: noqa: E402
+
+print("[startup] config: begin imports", flush=True)
+
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+print("[startup] config: imports done (pydantic_settings loaded)", flush=True)
 
 
 class Settings(BaseSettings):
@@ -152,4 +162,6 @@ def get_settings() -> Settings:
     return Settings()
 
 
+print("[startup] config: instantiating Settings()...", flush=True)
 settings = get_settings()
+print("[startup] config: Settings() instantiated", flush=True)
