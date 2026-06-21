@@ -258,10 +258,6 @@ sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port $
 - If you set a **custom Start Command** in the platform dashboard, it overrides
   the image `CMD` — mirror the command above there (keeping `$PORT`).
 
-> The image currently ships a more verbose, **diagnostic** start command (extra
-> shell `echo`s and `uvicorn --log-level debug`) used to trace a startup hang.
-> Revert it to the command above once startup is confirmed healthy.
-
 ### CI/CD
 
 [`.github/workflows/cicd.yml`](.github/workflows/cicd.yml) runs **lint + tests**
