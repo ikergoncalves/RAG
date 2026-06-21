@@ -18,6 +18,11 @@ engine = create_async_engine(
     settings.postgres_dsn,
     pool_pre_ping=True,
     future=True,
+    # Aggressive timeouts so a connect/query against an unreachable PostgreSQL
+    # fails fast instead of hanging the process forever (e.g. a misrouted DB on
+    # a managed host). For asyncpg, "timeout" bounds connection establishment
+    # and "command_timeout" bounds each statement (both in seconds).
+    connect_args={"timeout": 10, "command_timeout": 10},
 )
 
 AsyncSessionLocal = async_sessionmaker(

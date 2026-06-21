@@ -45,7 +45,12 @@ async def lifespan(_app: FastAPI):
     Configures structured logging on startup. Backing-service clients are
     created lazily, so there is nothing else to set up here yet.
     """
+    # Temporary startup diagnostics (remove once the startup hang is resolved):
+    # explicit markers bracket the lifespan body so that if any call inside it
+    # hangs, the last marker printed pinpoints exactly where.
+    print("[startup] lifespan: begin", flush=True)
     configure_logging()
+    print("[startup] lifespan: logging configured", flush=True)
     get_logger(__name__).info(
         "app.startup",
         app=settings.app_name,
@@ -53,7 +58,9 @@ async def lifespan(_app: FastAPI):
         environment=settings.environment,
     )
     _log_startup_memory()
+    print("[startup] lifespan: startup complete, yielding", flush=True)
     yield
+    print("[shutdown] lifespan: end", flush=True)
 
 
 def create_app() -> FastAPI:
