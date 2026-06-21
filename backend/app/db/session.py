@@ -14,6 +14,11 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import settings
 
+# Temporary startup diagnostics (remove once the startup hang is resolved):
+# bracket the import-time engine construction. create_async_engine does not
+# open a connection, so this should print both markers instantly — if it does
+# not, the engine construction itself is the culprit.
+print("[startup] db.session: creating async engine...", flush=True)
 engine = create_async_engine(
     settings.postgres_dsn,
     pool_pre_ping=True,
@@ -24,6 +29,7 @@ engine = create_async_engine(
     # and "command_timeout" bounds each statement (both in seconds).
     connect_args={"timeout": 10, "command_timeout": 10},
 )
+print("[startup] db.session: async engine created", flush=True)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
