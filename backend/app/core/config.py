@@ -14,6 +14,7 @@ now but only consumed in later phases.
 print("[startup] config: begin imports", flush=True)
 
 from functools import lru_cache
+from urllib.parse import quote
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -101,6 +102,11 @@ class Settings(BaseSettings):
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0
+    # Auth for managed Redis (e.g. Railway). The local docker-compose Redis needs
+    # no auth, so these stay unset there. When a password is set, the connection
+    # URL also carries the ACL username (Redis defaults to "default").
+    redis_user: str | None = None
+    redis_password: str | None = None
 
     # --- Cache (Redis) ---------------------------------------------------
     # TTL for cached query embeddings (dense vectors keyed by the normalized
@@ -149,11 +155,32 @@ class Settings(BaseSettings):
 
     @property
     def redis_url(self) -> str:
+        """Redis connection URL, including credentials when a password is set.
+
+        Local development Redis needs no auth, so the bare host/port form is used
+        when no password is configured. Managed Redis (e.g. Railway) requires a
+        password plus an ACL username (``default`` unless overridden); both are
+        URL-encoded so special characters in the password don't break the URL.
+        """
+        if self.redis_password:
+            user = quote(self.redis_user or "default", safe="")
+            password = quote(self.redis_password, safe="")
+            return (
+                f"redis://{user}:{password}@"
+                f"{self.redis_host}:{self.redis_port}/{self.redis_db}"
+            )
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     @property
     def qdrant_url(self) -> str:
-        return f"http://{self.qdrant_host}:{self.qdrant_port}"
+        """REST URL for Qdrant.
+
+        Uses HTTPS when an API key is configured (managed Qdrant such as Qdrant
+        Cloud requires TLS) and plain HTTP otherwise (the local docker-compose
+        Qdrant, which needs no key).
+        """
+        scheme = "https" if self.qdrant_api_key else "http"
+        return f"{scheme}://{self.qdrant_host}:{self.qdrant_port}"
 
 
 @lru_cache
