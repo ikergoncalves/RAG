@@ -1,24 +1,57 @@
 """FastAPI application entrypoint."""
 
+# Temporary startup diagnostics: a print is interleaved between every top-level
+# import to pinpoint exactly which import hangs on a constrained/misconfigured
+# host (the last marker printed names the import that was in progress).
+# Interleaving statements breaks the "imports at top of file" rule, so E402 is
+# silenced file-wide for now. Remove this instrumentation once the hang is found.
+# ruff: noqa: E402
+
+print("[startup] main: begin imports", flush=True)
+
 from contextlib import asynccontextmanager
 
+print("[startup] main: contextlib done", flush=True)
+
 from fastapi import FastAPI, Request
+
+print("[startup] main: fastapi done", flush=True)
+
 from fastapi.middleware.cors import CORSMiddleware
 
+print("[startup] main: fastapi.middleware.cors done", flush=True)
+
 from app.api.chat import router as chat_router
+
+print("[startup] main: app.api.chat done", flush=True)
+
 from app.api.documents import router as documents_router
+
+print("[startup] main: app.api.documents done", flush=True)
+
 from app.api.health import router as health_router
+
+print("[startup] main: app.api.health done", flush=True)
+
 from app.api.metrics import router as metrics_router
+
+print("[startup] main: app.api.metrics done", flush=True)
+
 from app.api.retrieval import router as retrieval_router
+
+print("[startup] main: app.api.retrieval done", flush=True)
+
 from app.core.config import settings
+
+print("[startup] main: app.core.config done", flush=True)
+
 from app.core.logging import configure_logging, get_logger
+
+print("[startup] main: app.core.logging done", flush=True)
+
 from app.core.metrics import record_request
 
-# Temporary startup diagnostic: printed once all module-level imports above have
-# resolved. If a low-RAM host OOM-kills the process *during* import, this line
-# never appears — distinguishing an import-time death from a later failure.
-# Remove once the startup memory issue is confirmed resolved.
-print("[startup] app.main imported", flush=True)
+print("[startup] main: app.core.metrics done — app.main imported", flush=True)
 
 
 def _log_startup_memory() -> None:
