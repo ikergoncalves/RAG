@@ -125,11 +125,16 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
+      # Optional: the bundled Qdrant needs no auth; set when using a managed one.
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       UPLOAD_DIR: /app/var/uploads
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}
+      # Optional: re-ranking degrades to a no-op when unset, so this does not
+      # block startup (unlike the required credentials above).
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?LANGFUSE_PUBLIC_KEY is required}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?LANGFUSE_SECRET_KEY is required}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse:3000}

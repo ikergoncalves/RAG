@@ -17,8 +17,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app
 
 # Install dependencies first so this layer is cached unless requirements change.
-# requirements.txt carries the `--extra-index-url .../whl/cpu` line, so torch
-# resolves to the CPU-only wheel (no multi-GB CUDA build) on this CPU image.
+# Re-ranking is delegated to the Cohere API, so there is no torch /
+# sentence-transformers to install — the build is fast and the image stays small.
 # All current dependencies ship manylinux wheels, so no compiler toolchain is
 # needed here.
 COPY requirements.txt ./

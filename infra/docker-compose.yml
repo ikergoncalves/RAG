@@ -106,11 +106,15 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-rag}
       QDRANT_HOST: qdrant
       QDRANT_PORT: 6333
+      # Local Qdrant requires no auth; set only when pointing at a secured one.
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       UPLOAD_DIR: /app/var/uploads
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Cohere Rerank API key (optional; re-ranking is a no-op when unset).
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
       # Langfuse tracing (defaults match the langfuse service's init keys; clear
       # them to disable tracing — the instrumentation becomes a silent no-op).
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-rag-local}

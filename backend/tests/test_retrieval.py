@@ -1,13 +1,13 @@
-"""Tests for hybrid retrieval (dense + BM25/RRF) and cross-encoder re-ranking.
+"""Tests for hybrid retrieval (dense + BM25/RRF) and Cohere re-ranking.
 
 Layering mirrors ``test_indexing.py``:
 
 - Qdrant-backed tests skip themselves when Qdrant is unreachable. Chunks live in
   in-memory SQLite and embeddings are stubbed, so they need neither PostgreSQL
   nor OpenAI.
-- The reranker wrapper is unit-tested with a stub model (no download).
-- One opt-in test exercises the *real* cross-encoder; it is skipped unless
-  ``RUN_RERANKER_MODEL_TESTS=1`` (it downloads model weights from the hub).
+- The reranker wrapper is unit-tested with a fake Cohere client (no network).
+- One opt-in test exercises the *real* Cohere Rerank API; it is skipped unless
+  ``COHERE_API_KEY`` is set (same pattern as the OpenAI/Anthropic tests).
 
 The headline test (``test_hybrid_recovers_exact_keyword_chunk_that_dense_misses``)
 is also the RRF compatibility check against the running Qdrant server: it
@@ -16,7 +16,6 @@ exercises ``Prefetch`` + ``FusionQuery(RRF)`` end to end.
 
 import asyncio
 import hashlib
-import os
 import random
 import socket
 import uuid
@@ -33,7 +32,7 @@ from app.core.config import settings
 from app.models import Base, Chunk, Document, DocumentStatus
 from app.services import indexing, vector_store
 from app.services.embeddings.base import EmbeddingProvider
-from app.services.retrieval import CrossEncoderReranker, RetrievalService
+from app.services.retrieval import CohereReranker, RetrievalService
 
 
 def _qdrant_reachable() -> bool:
@@ -44,22 +43,13 @@ def _qdrant_reachable() -> bool:
         return False
 
 
-def _sentence_transformers_available() -> bool:
-    try:
-        import sentence_transformers  # noqa: F401
-
-        return True
-    except Exception:
-        return False
-
-
 requires_qdrant = pytest.mark.skipif(
     not _qdrant_reachable(),
     reason="Qdrant is not reachable (start infra/docker-compose.yml)",
 )
-requires_reranker_model = pytest.mark.skipif(
-    not (os.getenv("RUN_RERANKER_MODEL_TESTS") and _sentence_transformers_available()),
-    reason="set RUN_RERANKER_MODEL_TESTS=1 (with sentence-transformers) to run the real reranker",
+requires_cohere = pytest.mark.skipif(
+    not settings.cohere_api_key,
+    reason="COHERE_API_KEY is not set",
 )
 
 
@@ -123,7 +113,7 @@ class FakeSparseEmbedder:
 
 
 class StubReranker:
-    """Reranks by a content->score map; stands in for the cross-encoder."""
+    """Reranks by a content->score map; stands in for the Cohere reranker."""
 
     def __init__(self, scores_by_content: dict[str, float]) -> None:
         self._scores = scores_by_content
@@ -137,14 +127,37 @@ class StubReranker:
         return ranked
 
 
-class _FakeCrossEncoderModel:
-    """Minimal stand-in for ``sentence_transformers.CrossEncoder``."""
+class _FakeRerankResult:
+    """One item of a Cohere rerank response: an index into the input + its score."""
+
+    def __init__(self, index: int, relevance_score: float) -> None:
+        self.index = index
+        self.relevance_score = relevance_score
+
+
+class _FakeRerankResponse:
+    """Stand-in for the Cohere rerank response object (carries a ``.results`` list)."""
+
+    def __init__(self, results: list[_FakeRerankResult]) -> None:
+        self.results = results
+
+
+class _FakeCohereClient:
+    """Minimal stand-in for ``cohere.ClientV2``: scores documents by a map."""
 
     def __init__(self, scores_by_content: dict[str, float]) -> None:
         self._scores = scores_by_content
 
-    def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
-        return [self._scores[content] for _query, content in pairs]
+    def rerank(
+        self, *, model: str, query: str, documents: list[str], top_n: int
+    ) -> _FakeRerankResponse:
+        results = [
+            _FakeRerankResult(index=index, relevance_score=self._scores[content])
+            for index, content in enumerate(documents)
+        ]
+        # Cohere returns results ordered by descending relevance.
+        results.sort(key=lambda result: result.relevance_score, reverse=True)
+        return _FakeRerankResponse(results[:top_n])
 
 
 # --- Fixtures / helpers --------------------------------------------------
@@ -401,18 +414,18 @@ def test_retrieval_service_returns_reranked_topk_with_metadata() -> None:
 
 
 def test_reranker_reorders_candidates_and_preserves_fields() -> None:
-    """The reranker sorts by model score, attaches rerank_score, keeps fusion score."""
+    """The reranker sorts by the API score, attaches rerank_score, keeps fusion score."""
     candidates = [
         {"chunk_id": "a", "content": "first by fusion", "score": 0.9},
         {"chunk_id": "b", "content": "second by fusion", "score": 0.5},
         {"chunk_id": "c", "content": "third by fusion", "score": 0.1},
     ]
-    # The model considers "b" most relevant and "a" least — order must change.
-    model = _FakeCrossEncoderModel(
+    # The reranker considers "b" most relevant and "a" least — order must change.
+    client = _FakeCohereClient(
         {"first by fusion": 0.1, "second by fusion": 0.95, "third by fusion": 0.4}
     )
-    reranker = CrossEncoderReranker()
-    reranker._model = model  # inject the stub, bypassing the lazy download
+    reranker = CohereReranker()
+    reranker._client = client  # inject the stub, bypassing the real API call
 
     reranked = reranker.rerank("a query", candidates)
 
@@ -424,16 +437,39 @@ def test_reranker_reorders_candidates_and_preserves_fields() -> None:
     assert reranker.rerank("a query", []) == []
 
 
-@requires_reranker_model
-def test_real_cross_encoder_promotes_relevant_passage() -> None:
-    """The real cross-encoder lifts the genuinely relevant passage to the top."""
+def test_reranker_falls_back_to_fusion_order_when_api_fails() -> None:
+    """An API failure degrades to the original fusion order instead of raising."""
+    candidates = [
+        {"chunk_id": "a", "content": "first by fusion", "score": 0.9},
+        {"chunk_id": "b", "content": "second by fusion", "score": 0.5},
+    ]
+
+    class _FailingClient:
+        def rerank(self, **_kwargs: Any) -> _FakeRerankResponse:
+            raise RuntimeError("simulated rate limit / timeout")
+
+    reranker = CohereReranker()
+    reranker._client = _FailingClient()
+
+    reranked = reranker.rerank("a query", candidates)
+
+    # Original order preserved and every candidate still carries a rerank_score
+    # (the fusion score stands in), so downstream consumers need no special case.
+    assert [item["chunk_id"] for item in reranked] == ["a", "b"]
+    assert reranked[0]["rerank_score"] == pytest.approx(0.9)
+    assert reranked[1]["rerank_score"] == pytest.approx(0.5)
+
+
+@requires_cohere
+def test_real_cohere_rerank_promotes_relevant_passage() -> None:
+    """The real Cohere Rerank API lifts the genuinely relevant passage to the top."""
     query = "What is the capital of France?"
     candidates = [
         {"chunk_id": "fruit", "content": "Bananas are a good source of potassium.", "score": 0.9},
         {"chunk_id": "paris", "content": "Paris is the capital city of France.", "score": 0.5},
         {"chunk_id": "wall", "content": "The Great Wall of China is very long.", "score": 0.1},
     ]
-    reranker = CrossEncoderReranker()
+    reranker = CohereReranker()
 
     reranked = reranker.rerank(query, candidates)
 
