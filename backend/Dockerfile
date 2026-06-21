@@ -49,4 +49,13 @@ USER app
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Start command: run migrations, then the API server. `exec` makes uvicorn the
+# foreground PID for clean signal handling; `${PORT:-8000}` honors the platform
+# port ($PORT on Railway/Render/Fly) and falls back to 8000 locally.
+#
+# TEMPORARY startup diagnostics (remove once the Railway startup hang is fixed):
+# the two `echo`s confirm the shell reaches uvicorn after Alembic and print the
+# raw $PORT (quoted, so an empty/malformed value is visible); `--log-level debug`
+# surfaces uvicorn's own pre-import initialization. PYTHONUNBUFFERED=1 (set above)
+# keeps stdout unbuffered so every line appears live.
+CMD ["sh", "-c", "echo \"[shell] PORT is: '$PORT'\" && alembic upgrade head && echo '[shell] alembic done, invoking uvicorn now' && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level debug"]
