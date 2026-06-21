@@ -232,9 +232,35 @@ make seed-demo                                  # optional: load demo content
 ```
 
 Both images are built multi-stage for small, non-root runtimes: the backend
-copies only a pre-built virtualenv (with the CPU-only PyTorch wheel) into a slim
-base and runs as an unprivileged user; the frontend serves the static build
-through the non-root `nginx-unprivileged` image (listening on `:8080`).
+copies only a pre-built virtualenv into a slim base and runs as an unprivileged
+user; the frontend serves the static build through the non-root
+`nginx-unprivileged` image (listening on `:8080`).
+
+### Single-container hosts (Railway, Render, Fly.io)
+
+The backend image also runs standalone on a single-container PaaS — it only
+needs the managed Postgres/Redis/Qdrant connection settings (and the provider
+keys) as environment variables. The image's default start command runs the
+Alembic migrations and then uvicorn, binding to the platform-injected `$PORT`:
+
+```bash
+sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'
+```
+
+- **Bind to `$PORT` and `0.0.0.0`.** The platform injects `$PORT`; binding to a
+  fixed port or to `127.0.0.1` leaves the health check unreachable. An empty or
+  malformed `$PORT` makes uvicorn fail to bind, which can look like a silent
+  startup hang.
+- **`exec` the server** so it becomes the container's foreground process and
+  receives `SIGTERM` directly (clean shutdown, no lingering shell).
+- **Keep stdout unbuffered** (`PYTHONUNBUFFERED=1`, already set in the image) so
+  startup logs stream live instead of surfacing only after a buffer flushes.
+- If you set a **custom Start Command** in the platform dashboard, it overrides
+  the image `CMD` — mirror the command above there (keeping `$PORT`).
+
+> The image currently ships a more verbose, **diagnostic** start command (extra
+> shell `echo`s and `uvicorn --log-level debug`) used to trace a startup hang.
+> Revert it to the command above once startup is confirmed healthy.
 
 ### CI/CD
 
