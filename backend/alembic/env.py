@@ -46,10 +46,20 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        # Fail fast if PostgreSQL is unreachable. Migrations run before the API
+        # server starts, so without a connect timeout this step hangs forever on
+        # an unreachable DB (no error, no log) — the exact silent-startup-hang
+        # symptom this guards against. asyncpg "timeout" is in seconds.
+        connect_args={"timeout": 10},
     )
+    # Temporary startup diagnostics (remove once the hang is resolved): isolate
+    # whether the migration step hangs on connect vs. while running migrations.
+    print("[alembic] connecting to database...", flush=True)
     async with connectable.connect() as connection:
+        print("[alembic] connected; running migrations", flush=True)
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()
+    print("[alembic] migrations complete", flush=True)
 
 
 def run_migrations_online() -> None:
