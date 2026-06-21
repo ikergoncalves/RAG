@@ -14,6 +14,29 @@ from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
 from app.core.metrics import record_request
 
+# Temporary startup diagnostic: printed once all module-level imports above have
+# resolved. If a low-RAM host OOM-kills the process *during* import, this line
+# never appears — distinguishing an import-time death from a later failure.
+# Remove once the startup memory issue is confirmed resolved.
+print("[startup] app.main imported", flush=True)
+
+
+def _log_startup_memory() -> None:
+    """Temporary diagnostic: log the process's peak RSS once startup completes.
+
+    Uses the stdlib ``resource`` module (Linux/Unix only; a silent no-op on
+    other platforms), so it adds no dependency. ``ru_maxrss`` is in kilobytes
+    on Linux. Remove together with the import marker above once startup memory
+    is confirmed healthy.
+    """
+    try:
+        import resource
+
+        max_rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        get_logger(__name__).info("app.startup.memory", max_rss_mb=round(max_rss_kb / 1024, 1))
+    except Exception:  # pragma: no cover - platform/SDK dependent
+        pass
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -29,6 +52,7 @@ async def lifespan(_app: FastAPI):
         version=settings.app_version,
         environment=settings.environment,
     )
+    _log_startup_memory()
     yield
 
 

@@ -26,9 +26,8 @@ SQLite with fakes — no API keys, Qdrant or Redis required.
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import tiktoken
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
@@ -44,6 +43,9 @@ from app.services.retrieval import (
     RetrievalService,
     get_default_retrieval_service,
 )
+
+if TYPE_CHECKING:
+    import tiktoken
 
 logger = get_logger(__name__)
 
@@ -356,6 +358,9 @@ def _count_tokens(text: str) -> int:
     """Return the token count of ``text`` (for estimating embedding cost)."""
     global _encoder
     if _encoder is None:
+        # Imported lazily so tiktoken never loads on the startup/import path.
+        import tiktoken
+
         _encoder = tiktoken.get_encoding(settings.tiktoken_encoding)
     return len(_encoder.encode(text))
 

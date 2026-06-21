@@ -19,11 +19,6 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-try:  # The SDK is optional; absence (or a bad version) degrades to a no-op.
-    from langfuse import Langfuse
-except Exception:  # pragma: no cover - import guard
-    Langfuse = None  # type: ignore[assignment]
-
 
 class _NoOpSpan:
     """Span handle used when tracing is disabled; every method is a no-op."""
@@ -106,7 +101,15 @@ class ObservabilityService:
 
 
 def _build() -> ObservabilityService:
-    if Langfuse is None or not (settings.langfuse_public_key and settings.langfuse_secret_key):
+    if not (settings.langfuse_public_key and settings.langfuse_secret_key):
+        return ObservabilityService(None)
+    # Import the SDK lazily (only when tracing is actually configured) so it
+    # never loads on the application's startup/import path. The SDK is optional;
+    # absence (or a bad version) degrades to a silent no-op.
+    try:
+        from langfuse import Langfuse
+    except Exception as exc:  # pragma: no cover - import guard
+        logger.warning("Langfuse SDK unavailable; tracing disabled: %s", exc)
         return ObservabilityService(None)
     try:
         client = Langfuse(
