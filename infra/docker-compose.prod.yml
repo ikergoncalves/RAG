@@ -129,6 +129,10 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # Optional Redis auth (managed Redis); blank by default for the bundled
+      # no-auth Redis on the internal network.
+      REDIS_USER: ${REDIS_USER:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       UPLOAD_DIR: /app/var/uploads
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}
