@@ -18,8 +18,11 @@ RUN npm run build
 # block listens on 8080, so binding a privileged (<1024) port is never needed.
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 
-# Our server block listens on 8080 to match the unprivileged base image.
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Server block as a template: the base image's entrypoint runs envsubst over
+# /etc/nginx/templates/*.template at startup and writes the result to
+# /etc/nginx/conf.d/default.conf, so ${BACKEND_URL} is substituted before nginx
+# starts. (Our block listens on 8080 to match the unprivileged base image.)
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080

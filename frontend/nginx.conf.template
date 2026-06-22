@@ -1,0 +1,50 @@
+server {
+    # 8080, not 80: the nginx-unprivileged base image runs as a non-root user
+    # that cannot bind privileged ports. Compose maps the host port to this.
+    listen 8080;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # The backend target is injected at container start from ${BACKEND_URL}: the
+    # base image's entrypoint runs envsubst over /etc/nginx/templates/*.template
+    # before nginx starts (only env-style ${...} refs are substituted; nginx's
+    # own $proxy_host / $uri / ... runtime variables are left untouched). This
+    # lets one image serve both environments:
+    #   - Docker Compose: http://backend:8000              (internal hostname)
+    #   - Railway / PaaS: https://<backend-public-domain>  (no trailing slash)
+    #
+    # Host is set to $proxy_host (the backend's own host, parsed from BACKEND_URL)
+    # rather than $host, so a PaaS edge that routes by Host/SNI reaches the
+    # backend service instead of looping back to the frontend. proxy_ssl_server_name
+    # forwards SNI when BACKEND_URL is https (required by such edges); it is a
+    # no-op for the plain-http compose backend.
+
+    # Proxy health checks to the backend so the browser uses same-origin requests.
+    location = /health {
+        proxy_pass ${BACKEND_URL}/health;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_ssl_server_name on;
+    }
+
+    # App API. The frontend calls `/api/*`; the prefix is stripped here (the
+    # trailing slash on proxy_pass maps `/api/documents` -> `/documents`) so the
+    # API paths never shadow the SPA's client-side routes (e.g. `/documents`).
+    # `/api/chat` streams Server-Sent Events, so response buffering is disabled.
+    location /api/ {
+        proxy_pass ${BACKEND_URL}/;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_ssl_server_name on;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
+    }
+
+    # SPA fallback: serve index.html for client-side routes.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

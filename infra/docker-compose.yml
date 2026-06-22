@@ -151,6 +151,11 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+    environment:
+      # Backend the nginx template proxies /api and /health to (substituted into
+      # the config at container start). Internal compose service hostname here;
+      # on a PaaS like Railway, set this to the backend's public URL.
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
     # The nginx container listens on 8080 (non-root nginx-unprivileged image).
     ports:
       - "${FRONTEND_PORT:-5173}:8080"
