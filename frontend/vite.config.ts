@@ -5,7 +5,7 @@ import { defineConfig } from 'vite'
 // In dev (`npm run dev`) the frontend talks to the backend through a same-origin
 // proxy. App endpoints are namespaced under `/api` (so they never shadow the
 // client-side routes) and the `/api` prefix is stripped before forwarding. In
-// Docker the same mapping is done by nginx (see frontend/nginx.conf).
+// Docker the same mapping is done by nginx (see frontend/nginx.conf.template).
 const backend = 'http://localhost:8000'
 
 export default defineConfig({

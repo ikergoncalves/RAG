@@ -144,7 +144,7 @@ rag/
 │   └── Dockerfile           # multi-stage, non-root runtime
 ├── frontend/                # Vite + React + TypeScript
 │   ├── src/
-│   ├── nginx.conf           # serves the SPA and proxies /health + /api to backend
+│   ├── nginx.conf.template  # serves the SPA and proxies /health + /api to ${BACKEND_URL}
 │   └── Dockerfile           # build + non-root nginx (nginx-unprivileged)
 ├── infra/
 │   ├── docker-compose.yml       # full local stack (development)
@@ -257,6 +257,19 @@ sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port $
   startup logs stream live instead of surfacing only after a buffer flushes.
 - If you set a **custom Start Command** in the platform dashboard, it overrides
   the image `CMD` — mirror the command above there (keeping `$PORT`).
+
+When the **frontend** is deployed as its own service (the Docker Compose internal
+`backend` hostname does not exist there), point its nginx proxy at the backend's
+public URL via the **`BACKEND_URL`** environment variable:
+
+- Set `BACKEND_URL` to the backend's public origin **without a trailing slash**,
+  e.g. `https://rag-production-ca4c.up.railway.app`. The image substitutes it
+  into [`frontend/nginx.conf.template`](frontend/nginx.conf.template) at startup
+  (the nginx base image's `envsubst` step over `/etc/nginx/templates`).
+- The proxy sends `Host: <backend host>` and forwards SNI, so a PaaS edge that
+  routes by Host/SNI reaches the backend service (an `https` `BACKEND_URL` is
+  expected for such hosts). Locally, Docker Compose sets
+  `BACKEND_URL=http://backend:8000` and everything works unchanged.
 
 ### CI/CD
 
