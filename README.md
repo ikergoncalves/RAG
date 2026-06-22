@@ -10,13 +10,13 @@ exact quotes and a clickable source location (document, page, section).
 
 ## Demo
 
-> **Live demo:** _coming soon_ — <https://TODO-demo-url.example> (placeholder).
+> **Live demo:** <https://protective-warmth-production-129b.up.railway.app>
 
 Run the whole system locally with a single command — no `.env` required, since
 sensible defaults are baked into the compose file:
 
 ```bash
-docker-compose -f infra/docker-compose.yml up --build
+docker compose -f infra/docker-compose.yml up --build
 ```
 
 Then open the frontend at <http://localhost:5173>, upload a document on the
@@ -29,8 +29,8 @@ documents (networking, web, programming and computing-history texts) so you can
 start asking questions immediately:
 
 ```bash
-make eval-install      # one-off: create eval/.venv with httpx
-make seed-demo         # upload + index everything in seed-data/ (idempotent)
+pip install httpx               # one-off (use py -m pip on Windows)
+python eval/seed_demo.py        # upload + index everything in seed-data/
 ```
 
 See [How to run locally](#how-to-run-locally) for the full setup and
@@ -164,7 +164,7 @@ Requires Docker + Docker Compose.
 
 ```bash
 # from the repository root
-docker-compose -f infra/docker-compose.yml up --build
+docker compose -f infra/docker-compose.yml up --build
 ```
 
 This starts PostgreSQL, Qdrant, Redis, the backend, and the frontend. Defaults
@@ -271,6 +271,12 @@ public URL via the **`BACKEND_URL`** environment variable:
   expected for such hosts). Locally, Docker Compose sets
   `BACKEND_URL=http://backend:8000` and everything works unchanged.
 
+> In this project's Railway deployment, the frontend runs as a **separate
+> service** with `BACKEND_URL` set to the backend's public URL
+> (`https://rag-production-ca4c.up.railway.app`). Set the frontend service's
+> **Target Port to `8080`** — the `nginx-unprivileged` image listens there and
+> does not read `$PORT`.
+
 ### CI/CD
 
 [`.github/workflows/cicd.yml`](.github/workflows/cicd.yml) runs **lint + tests**
@@ -291,7 +297,7 @@ workflow, [`.github/workflows/eval.yml`](.github/workflows/eval.yml) (see
 | Frontend lint        | `cd frontend && npm run lint`                              |
 | Frontend tests       | `cd frontend && npm run test`                              |
 | Frontend type-check  | `cd frontend && npm run build`                             |
-| Full stack (Docker)  | `docker-compose -f infra/docker-compose.yml up --build`    |
+| Full stack (Docker)  | `docker compose -f infra/docker-compose.yml up --build`    |
 | RAGAS evaluation     | `make eval` (stack must be running — see [Evaluation](#evaluation)) |
 
 ## Status
@@ -301,7 +307,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
 - ✅ **Phase 0 — Project scaffold**: monorepo structure, FastAPI `/health` with
   Postgres/Qdrant/Redis connectivity checks, React + Vite frontend showing the
   health status, Docker Compose for the full stack, and CI (lint + tests).
-  Verified end-to-end via `docker-compose -f infra/docker-compose.yml up --build`:
+  Verified end-to-end via `docker compose -f infra/docker-compose.yml up --build`:
   `GET /health` returns `200` with `{"status": "ok"}` and `postgres`, `qdrant`,
   and `redis` all reporting `"ok"` (confirmed both on the backend at `:8000` and
   through the frontend's nginx proxy at `:5173`).
@@ -313,7 +319,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   `page_number`/`section_path` and `char_start`/`char_end` offsets; and the
   `POST /documents` (background processing), `GET /documents`,
   `GET /documents/{id}`, `GET /documents/{id}/chunks` endpoints. Verified
-  end-to-end via docker-compose (upload → parse → chunk → `status=indexed`) and
+  end-to-end via docker compose (upload → parse → chunk → `status=indexed`) and
   10 unit tests covering parser metadata and chunk overlap/offsets.
 - ✅ **Phase 2 — Embeddings + Qdrant indexing**: swappable `EmbeddingProvider`
   with an OpenAI implementation (`text-embedding-3-small`, 1536-dim, batching +
@@ -325,7 +331,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   not reprocessed; automatic indexing after ingestion plus a manual
   `POST /documents/{id}/index` endpoint. Covered by Qdrant-backed integration
   tests (idempotency / no-duplicate / similarity search) that skip when Qdrant
-  or `OPENAI_API_KEY` is unavailable. Verified end-to-end via docker-compose
+  or `OPENAI_API_KEY` is unavailable. Verified end-to-end via docker compose
   with **real OpenAI embeddings** (migration `0002` auto-applied on startup;
   uploading `sample.md` → `status=indexed`, every chunk's `embedded_at`
   populated, and the `chunks` collection holding a matching number of points
@@ -343,7 +349,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   missing an exact-keyword chunk that hybrid (RRF) recovers — plus a
   cross-encoder re-ranking test; they skip when Qdrant is unavailable. The
   reranker default and the rationale are documented under
-  [Re-ranking](#re-ranking). Verified end-to-end via docker-compose on the new
+  [Re-ranking](#re-ranking). Verified end-to-end via docker compose on the new
   Qdrant `v1.18.0` image (fresh volume): uploading `sample.md` → `status=indexed`,
   then `POST /retrieve` with `{"query": "What does section 2.1 discuss?",
   "top_k": 3}` returned the `Chapter 2 > Section 2.1` chunk on top — with the
@@ -369,7 +375,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   SQLite with a fake provider (streaming/persistence, conversation reuse, the
   no-chunks short-circuit, the verbatim-quote repair) plus real-Anthropic
   integration tests that skip without a key. Verified end-to-end via
-  docker-compose with **real Claude**: uploading `sample.md` → `status=indexed`,
+  docker compose with **real Claude**: uploading `sample.md` → `status=indexed`,
   then `POST /chat` (via `curl -N`) for "What does section 2.1 discuss?" streamed
   the answer incrementally (multiple `delta` events over ~2 s) and returned
   citations whose `quote`s are exact, newline-accurate substrings of the cited
@@ -397,7 +403,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   resources never shadow the client-side routes (e.g. the `/documents` SPA route
   vs the `/documents` resource); nginx disables response buffering on `/api` so
   the `/chat` stream is delivered incrementally. Verified end-to-end via
-  `docker-compose up --wait` (all services healthy, `alembic current` at `0003`):
+  `docker compose up --wait` (all services healthy, `alembic current` at `0003`):
   through the nginx origin on `:5173`, navigating to `/documents` serves the SPA
   while `/api/documents` returns JSON; uploading `sample.md` polled
   `pending → processing → indexed` (3 chunks); asking "What does section 2.1
@@ -441,7 +447,7 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   estimate. The compose stack now includes Langfuse (UI at
   <http://localhost:3000>) with its own Postgres. See [Observability](#observability).
   Covered by `test_cache.py` and `test_metrics.py` (plus the existing chat
-  tests). Verified end-to-end via `docker-compose up --build --wait`: all seven
+  tests). Verified end-to-end via `docker compose up --build --wait`: all seven
   services came up healthy (including `langfuse` and `langfuse-db`); `GET /metrics`
   returned the Prometheus exposition with `rag_requests_total`,
   `rag_stage_latency_seconds_bucket`, `rag_cache_events_total` and
@@ -472,12 +478,11 @@ Phase-by-phase progress (see `ROADMAP.md` for the full plan):
   and [`eval/seed_demo.py`](eval/seed_demo.py) (`make seed-demo`) uploads and
   indexes them idempotently so a fresh deployment has browsable content. See
   [Architecture decisions](#architecture-decisions) and
-  [Production deployment](#production-deployment). _Verified: both compose files
-  pass `docker compose config`; the frontend image base/non-root user and the
-  service healthcheck tooling were confirmed against the real images; the
-  frontend lint/test/build and backend test suite pass. The GHCR push and a
-  full `docker-compose.prod.yml up` need a registry and real API keys, so they
-  run in CI / on the demo host rather than in this environment._
+  [Production deployment](#production-deployment). _Deployed and running on
+  Railway: the backend (<https://rag-production-ca4c.up.railway.app>) and the
+  frontend (<https://protective-warmth-production-129b.up.railway.app>) run as
+  separate services, with the seed documents indexed and the demo publicly
+  accessible._
 
 ### API endpoints
 
@@ -564,7 +569,7 @@ repo-root `.env` automatically (`OPENAI_API_KEY` for the RAGAS judge,
 
 ```bash
 # 1. Start the full stack
-docker-compose -f infra/docker-compose.yml up --build -d
+docker compose -f infra/docker-compose.yml up --build -d
 
 # 2. Install the eval dependencies (one-off, into eval/.venv)
 make eval-install
@@ -589,7 +594,7 @@ Point the harness at a non-default backend with `RAG_API_BASE_URL`
 [`.github/workflows/eval.yml`](.github/workflows/eval.yml) runs the evaluation
 on demand (`workflow_dispatch` — it is **not** part of the per-push CI because it
 spends OpenAI/Anthropic credits). Trigger it from the Actions tab; it boots the
-docker-compose stack, indexes the fixtures, runs `eval/run_ragas.py`, and
+docker compose stack, indexes the fixtures, runs `eval/run_ragas.py`, and
 publishes `eval/results/report.md` (and `report.json`) as a workflow artifact.
 It needs the repository secrets `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`.
 
